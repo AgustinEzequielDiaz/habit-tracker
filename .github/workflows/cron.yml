@@ -1,0 +1,41 @@
+name: Daily Score Calculation & Reminders
+
+on:
+  schedule:
+    # Score diario: 00:05 UTC todos los días
+    - cron: '5 0 * * *'
+    # Recordatorios: cada hora
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      function:
+        description: 'Edge Function to invoke'
+        required: true
+        default: 'calculate-daily-score'
+        type: choice
+        options:
+          - calculate-daily-score
+          - send-reminders
+
+jobs:
+  invoke-calculate-daily-score:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.function == 'calculate-daily-score' || (github.event_name == 'schedule' && github.event.schedule == '5 0 * * *')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invoke calculate-daily-score
+        run: |
+          curl -X POST "${{ secrets.SUPABASE_URL }}/functions/v1/calculate-daily-score" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"date": "'$(date -u +%Y-%m-%d)'"}'
+
+  invoke-send-reminders:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.function == 'send-reminders' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invoke send-reminders
+        run: |
+          curl -X POST "${{ secrets.SUPABASE_URL }}/functions/v1/send-reminders" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{}'
