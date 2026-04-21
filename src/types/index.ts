@@ -24,9 +24,18 @@ export interface User {
   total_xp: number
   global_score: number
   streak_best: number
+  streak_freeze_tokens: number
   onboarding_complete: boolean
   created_at: string
   updated_at: string
+}
+
+export interface StreakFreeze {
+  id: string
+  user_id: string
+  habit_id: string
+  freeze_date: string        // YYYY-MM-DD
+  used_at: string
 }
 
 export interface Habit {
@@ -44,9 +53,12 @@ export interface Habit {
   order_index: number
   is_active: boolean
   is_archived: boolean
+  // Scheduling (V3) — opcionales para compatibilidad con instancias sin migración
+  start_date?: string   // YYYY-MM-DD, default hoy
+  end_date?: string | null  // YYYY-MM-DD, null = sin fecha límite
   created_at: string
   updated_at: string
-  // Joined
+  // Joined from habits_with_streaks view
   current_streak?: number
   streak_start?: string | null
 }
@@ -154,6 +166,9 @@ export interface CreateHabitForm {
   unit?: string
   color: string
   icon: string
+  // Scheduling (V3)
+  start_date?: string   // YYYY-MM-DD, undefined = hoy
+  end_date?: string | null  // YYYY-MM-DD, undefined/null = sin fecha límite
 }
 
 export interface UpdateHabitForm extends Partial<CreateHabitForm> {

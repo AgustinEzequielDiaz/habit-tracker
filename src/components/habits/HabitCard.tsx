@@ -11,6 +11,7 @@ import { HabitCheckbox } from './HabitCheckbox'
 import { StreakBadge } from './StreakBadge'
 import { useTheme } from '@/hooks/useTheme'
 import { typography, spacing, radius } from '@/constants/theme'
+import { todayString } from '@/utils/date'
 
 interface HabitCardProps {
   habit: HabitWithCompletion
@@ -26,9 +27,20 @@ const CATEGORY_LABELS = {
   rutinas:       'Rutinas',
 }
 
+// Calcula los días restantes hasta end_date (null si no hay fecha límite)
+function getDaysRemaining(endDate?: string | null): number | null {
+  if (!endDate) return null
+  const today = todayString()
+  const diff = Math.round(
+    (new Date(endDate).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24)
+  )
+  return diff
+}
+
 export function HabitCard({ habit, onToggle, onPress, disabled }: HabitCardProps) {
-  const { colors, isDark } = useTheme()
+  const { colors } = useTheme()
   const feedbackOpacity = useSharedValue(0)
+  const daysRemaining = getDaysRemaining(habit.end_date)
 
   const handleToggle = useCallback(() => {
     onToggle(habit.id)
@@ -46,11 +58,7 @@ export function HabitCard({ habit, onToggle, onPress, disabled }: HabitCardProps
     opacity: feedbackOpacity.value,
   }))
 
-  const cardBg = habit.isCompleted
-    ? `${habit.color}15`
-    : isDark
-    ? colors.card
-    : colors.card
+  const cardBg = habit.isCompleted ? `${habit.color}15` : colors.card
 
   return (
     <TouchableOpacity
@@ -73,10 +81,9 @@ export function HabitCard({ habit, onToggle, onPress, disabled }: HabitCardProps
           style={[
             StyleSheet.absoluteFillObject,
             styles.feedbackOverlay,
-            { backgroundColor: `${habit.color}20` },
+            { backgroundColor: `${habit.color}20`, pointerEvents: 'none' },
             feedbackStyle,
           ]}
-          pointerEvents="none"
         />
 
         {/* Indicador de color */}
@@ -107,6 +114,32 @@ export function HabitCard({ habit, onToggle, onPress, disabled }: HabitCardProps
             </View>
 
             <View style={styles.rightSection}>
+              {/* Badge de días restantes (solo si quedan ≤7 días) */}
+              {daysRemaining !== null && daysRemaining <= 7 && (
+                <View style={[
+                  styles.daysRemainingBadge,
+                  {
+                    backgroundColor: daysRemaining === 0
+                      ? `${colors.success}20`
+                      : daysRemaining <= 3
+                        ? `${colors.error}15`
+                        : `${colors.warning}15`,
+                  },
+                ]}>
+                  <Text style={[
+                    styles.daysRemainingText,
+                    {
+                      color: daysRemaining === 0
+                        ? colors.success
+                        : daysRemaining <= 3
+                          ? colors.error
+                          : colors.warning,
+                    },
+                  ]}>
+                    {daysRemaining === 0 ? '¡Hoy!' : `${daysRemaining}d`}
+                  </Text>
+                </View>
+              )}
               {(habit.current_streak ?? 0) >= 2 && (
                 <StreakBadge streak={habit.current_streak ?? 0} compact />
               )}
@@ -168,5 +201,14 @@ const styles = StyleSheet.create({
   feedbackOverlay: {
     borderRadius: radius.lg,
     zIndex: 1,
+  },
+  daysRemainingBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+  },
+  daysRemainingText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
 })

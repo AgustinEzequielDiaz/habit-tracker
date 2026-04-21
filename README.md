@@ -43,7 +43,7 @@ En **Authentication → Providers**:
 En **Settings → API**:
 - `Project URL` → `EXPO_PUBLIC_SUPABASE_URL`
 - `anon public` key → `EXPO_PUBLIC_SUPABASE_ANON_KEY`
-- `service_role` key → para GitHub Secrets (cron jobs)
+- `service_role` key → para GitHub Secrets (cron jobs) — **nunca commitear esta key**
 
 ---
 

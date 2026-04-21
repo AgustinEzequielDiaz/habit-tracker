@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications'
 import * as Device from 'expo-device'
+import Constants from 'expo-constants'
 import { Platform } from 'react-native'
 import { supabase } from './supabase'
 
@@ -11,6 +12,15 @@ Notifications.setNotificationHandler({
     shouldSetBadge: false,
   }),
 })
+
+// Resolver projectId para push tokens (requerido en Expo SDK 49+)
+function getProjectId(): string | undefined {
+  return (
+    Constants.expoConfig?.extra?.eas?.projectId ??
+    (Constants as any).easConfig?.projectId ??
+    undefined
+  )
+}
 
 export const notificationsService = {
   // ─────────────────────────────────────────
@@ -44,8 +54,18 @@ export const notificationsService = {
       return null
     }
 
-    const tokenData = await Notifications.getExpoPushTokenAsync()
-    return tokenData.data
+    try {
+      const projectId = getProjectId()
+      const tokenData = await Notifications.getExpoPushTokenAsync(
+        projectId ? { projectId } : undefined
+      )
+      return tokenData.data
+    } catch (err) {
+      // En desarrollo sin EAS projectId configurado, las push tokens no están disponibles
+      // La app funciona igual — solo no habrá notificaciones remotas
+      console.warn('No se pudo obtener push token:', err)
+      return null
+    }
   },
 
   // ─────────────────────────────────────────

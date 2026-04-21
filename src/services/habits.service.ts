@@ -5,6 +5,8 @@ import { todayString } from '@/utils/date'
 export const habitsService = {
   // ─────────────────────────────────────────
   // Obtener hábitos activos del usuario con racha actual
+  // Devuelve TODOS los activos no-archivados; el store separa
+  // los de hoy vs los futuros client-side.
   // ─────────────────────────────────────────
   async getActive(): Promise<Habit[]> {
     const { data, error } = await supabase
@@ -19,7 +21,7 @@ export const habitsService = {
   },
 
   // ─────────────────────────────────────────
-  // Crear nuevo hábito
+  // Crear nuevo hábito (con soporte a start_date / end_date)
   // ─────────────────────────────────────────
   async create(form: CreateHabitForm): Promise<Habit> {
     const { data: user } = await supabase.auth.getUser()
@@ -34,21 +36,25 @@ export const habitsService = {
       .limit(1)
 
     const nextIndex = existing && existing.length > 0 ? existing[0].order_index + 1 : 0
+    const today = todayString()
 
     const { data, error } = await supabase
       .from('habits')
       .insert({
-        user_id: user.user.id,
-        name: form.name,
+        user_id:     user.user.id,
+        name:        form.name,
         description: form.description ?? null,
-        category: form.category,
-        type: form.type,
-        difficulty: form.difficulty,
+        category:    form.category,
+        type:        form.type,
+        difficulty:  form.difficulty,
         target_value: form.target_value ?? null,
-        unit: form.unit ?? null,
-        color: form.color,
-        icon: form.icon,
+        unit:        form.unit ?? null,
+        color:       form.color,
+        icon:        form.icon,
         order_index: nextIndex,
+        // Scheduling: si no se especifica start_date, usa hoy
+        start_date: form.start_date ?? today,
+        end_date:   form.end_date ?? null,
       })
       .select()
       .single()

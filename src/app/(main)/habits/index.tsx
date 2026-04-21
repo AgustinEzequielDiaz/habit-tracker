@@ -1,15 +1,21 @@
 import React, { useEffect, useState } from 'react'
 import {
-  View, Text, StyleSheet, FlatList, SafeAreaView,
+  View, Text, StyleSheet, SectionList, SafeAreaView,
   TouchableOpacity, Modal, Alert,
 } from 'react-native'
 import { useHabitsStore } from '@/stores/habits.store'
 import { HabitForm } from '@/components/habits/HabitForm'
+import { HabitTemplatesModal } from '@/components/habits/HabitTemplatesModal'
 import { Card } from '@/components/ui/Card'
 import { StreakBadge } from '@/components/habits/StreakBadge'
 import { useTheme } from '@/hooks/useTheme'
 import { spacing, typography, radius } from '@/constants/theme'
 import { Habit, CreateHabitForm } from '@/types'
+import { formatShortDate, todayString } from '@/utils/date'
+
+// ─────────────────────────────────────────────────────
+// Constantes de estilo
+// ─────────────────────────────────────────────────────
 
 const CATEGORY_COLORS: Record<string, string> = {
   fitness:       '#EF4444',
@@ -25,16 +31,145 @@ const CATEGORY_LABELS: Record<string, string> = {
   rutinas:       'Rutinas',
 }
 
+// ─────────────────────────────────────────────────────
+// Componente de item de hábito en la lista de gestión
+// ─────────────────────────────────────────────────────
+
+interface HabitListItemProps {
+  item: Habit
+  onArchive: (h: Habit) => void
+  dimmed?: boolean
+}
+
+function HabitListItem({ item, onArchive, dimmed = false }: HabitListItemProps) {
+  const { colors } = useTheme()
+
+  // Días restantes para hábitos con end_date
+  const daysRemaining = (() => {
+    if (!item.end_date) return null
+    const today = todayString()
+    return Math.round(
+      (new Date(item.end_date).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24)
+    )
+  })()
+
+  // Días hasta que empieza (para upcoming)
+  const daysUntilStart = (() => {
+    if (!item.start_date) return null
+    const today = todayString()
+    return Math.round(
+      (new Date(item.start_date).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24)
+    )
+  })()
+
+  return (
+    <Card style={styles.habitCard} padding={spacing.md}>
+      <View style={styles.habitRow}>
+        <View style={[styles.colorDot, { backgroundColor: dimmed ? `${item.color}60` : item.color }]} />
+        <View style={styles.habitInfo}>
+          <Text
+            style={[
+              styles.habitName,
+              { color: dimmed ? colors.textSecondary : colors.text },
+            ]}
+          >
+            {item.name}
+          </Text>
+          <View style={styles.habitMeta}>
+            <View style={[styles.categoryPill, { backgroundColor: `${CATEGORY_COLORS[item.category]}20` }]}>
+              <Text style={[styles.categoryText, { color: CATEGORY_COLORS[item.category] }]}>
+                {CATEGORY_LABELS[item.category]}
+              </Text>
+            </View>
+            <Text style={[styles.difficultyText, { color: colors.textSecondary }]}>
+              {item.difficulty === 'easy' ? 'Fácil' : item.difficulty === 'normal' ? 'Normal' : 'Difícil'}
+            </Text>
+
+            {/* Racha activa */}
+            {(item.current_streak ?? 0) >= 2 && (
+              <StreakBadge streak={item.current_streak ?? 0} compact />
+            )}
+
+            {/* Fecha de inicio para upcoming */}
+            {daysUntilStart !== null && daysUntilStart > 0 && (
+              <View style={[styles.schedulePill, { backgroundColor: `${colors.primary}15` }]}>
+                <Text style={[styles.schedulePillText, { color: colors.primary }]}>
+                  📅 {daysUntilStart === 1 ? 'Mañana' : formatShortDate(item.start_date!)}
+                </Text>
+              </View>
+            )}
+
+            {/* Días restantes para challenge */}
+            {daysRemaining !== null && daysRemaining >= 0 && (
+              <View style={[
+                styles.schedulePill,
+                {
+                  backgroundColor: daysRemaining <= 3
+                    ? `${colors.error}15`
+                    : daysRemaining <= 7
+                      ? `${colors.warning}15`
+                      : `${colors.success}15`,
+                },
+              ]}>
+                <Text style={[
+                  styles.schedulePillText,
+                  {
+                    color: daysRemaining <= 3
+                      ? colors.error
+                      : daysRemaining <= 7
+                        ? colors.warning
+                        : colors.success,
+                  },
+                ]}>
+                  🏁 {daysRemaining === 0 ? 'Último día' : `${daysRemaining}d restantes`}
+                </Text>
+              </View>
+            )}
+
+            {/* Challenge completado (expired) */}
+            {daysRemaining !== null && daysRemaining < 0 && (
+              <View style={[styles.schedulePill, { backgroundColor: `${colors.textSecondary}15` }]}>
+                <Text style={[styles.schedulePillText, { color: colors.textSecondary }]}>
+                  ✅ Challenge completado
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+        <TouchableOpacity
+          onPress={() => onArchive(item)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={{ fontSize: 18, color: colors.textSecondary }}>···</Text>
+        </TouchableOpacity>
+      </View>
+    </Card>
+  )
+}
+
+// ─────────────────────────────────────────────────────
+// Pantalla principal
+// ─────────────────────────────────────────────────────
+
 export default function HabitsScreen() {
   const { colors } = useTheme()
-  const { habits, loadHabits, addHabit, archiveHabit, isLoading } = useHabitsStore()
+  const { habits, upcomingHabits, expiredHabits, loadHabits, addHabit, archiveHabit } = useHabitsStore()
   const [showForm, setShowForm] = useState(false)
+  const [showTemplates, setShowTemplates] = useState(false)
+  const [prefillForm, setPrefillForm] = useState<CreateHabitForm | undefined>()
 
   useEffect(() => { loadHabits() }, [])
 
   const handleCreate = async (form: CreateHabitForm) => {
     await addHabit(form)
     setShowForm(false)
+    setPrefillForm(undefined)
+  }
+
+  const handleTemplateSelect = (form: CreateHabitForm) => {
+    setShowTemplates(false)
+    setPrefillForm(form)
+    setShowForm(true)
   }
 
   const handleArchive = (habit: Habit) => {
@@ -52,84 +187,126 @@ export default function HabitsScreen() {
     )
   }
 
-  const renderHabit = ({ item }: { item: Habit }) => (
-    <Card style={styles.habitCard} padding={spacing.md}>
-      <View style={styles.habitRow}>
-        <View style={[styles.colorDot, { backgroundColor: item.color }]} />
-        <View style={styles.habitInfo}>
-          <Text style={[styles.habitName, { color: colors.text }]}>{item.name}</Text>
-          <View style={styles.habitMeta}>
-            <View style={[styles.categoryPill, { backgroundColor: `${CATEGORY_COLORS[item.category]}20` }]}>
-              <Text style={[styles.categoryText, { color: CATEGORY_COLORS[item.category] }]}>
-                {CATEGORY_LABELS[item.category]}
-              </Text>
-            </View>
-            <Text style={[styles.difficultyText, { color: colors.textSecondary }]}>
-              {item.difficulty === 'easy' ? 'Fácil' : item.difficulty === 'normal' ? 'Normal' : 'Difícil'}
-            </Text>
-            {(item.current_streak ?? 0) >= 2 && (
-              <StreakBadge streak={item.current_streak ?? 0} compact />
-            )}
-          </View>
-        </View>
-        <TouchableOpacity
-          onPress={() => handleArchive(item)}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Text style={{ fontSize: 18, color: colors.textSecondary }}>···</Text>
-        </TouchableOpacity>
-      </View>
-    </Card>
-  )
+  // Construir secciones dinámicas para SectionList
+  type Section = { title: string; subtitle?: string; data: Habit[]; dimmed?: boolean }
+  const sections: Section[] = []
+
+  if (habits.length > 0) {
+    sections.push({ title: 'Activos', data: habits })
+  }
+  if (upcomingHabits.length > 0) {
+    sections.push({
+      title: 'Próximos',
+      subtitle: 'Empiezan en los próximos días',
+      data: upcomingHabits,
+      dimmed: true,
+    })
+  }
+  if (expiredHabits.length > 0) {
+    sections.push({
+      title: 'Challenges completados',
+      subtitle: 'Podés archivarlos si ya no los necesitás',
+      data: expiredHabits,
+      dimmed: true,
+    })
+  }
+
+  const isEmpty = habits.length === 0 && upcomingHabits.length === 0
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Header */}
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text }]}>Mis hábitos</Text>
-        <TouchableOpacity
-          onPress={() => setShowForm(true)}
-          style={[styles.addBtn, { backgroundColor: colors.primary }]}
-        >
-          <Text style={styles.addBtnText}>+ Agregar</Text>
-        </TouchableOpacity>
+        <View style={styles.actions}>
+          <TouchableOpacity
+            onPress={() => setShowTemplates(true)}
+            style={[styles.templatesBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          >
+            <Text style={[styles.templatesBtnText, { color: colors.text }]}>✨ Plantillas</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => { setPrefillForm(undefined); setShowForm(true) }}
+            style={[styles.addBtn, { backgroundColor: colors.primary }]}
+          >
+            <Text style={styles.addBtnText}>+ Nuevo</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <FlatList
-        data={habits}
-        keyExtractor={(item) => item.id}
-        renderItem={renderHabit}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={() => (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyEmoji}>✅</Text>
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>
-              No tenés hábitos todavía
-            </Text>
-            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-              Creá tu primer hábito para empezar tu racha
-            </Text>
-          </View>
-        )}
-      />
+      {isEmpty ? (
+        // Empty state
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyEmoji}>✅</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>
+            No tenés hábitos todavía
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+            Usá plantillas para empezar rápido o creá uno desde cero
+          </Text>
+          <TouchableOpacity
+            onPress={() => setShowTemplates(true)}
+            style={[styles.emptyTemplatesBtn, { backgroundColor: colors.primary }]}
+          >
+            <Text style={styles.emptyTemplatesBtnText}>✨ Ver plantillas</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <SectionList
+          sections={sections}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item, section }) => (
+            <HabitListItem
+              item={item}
+              onArchive={handleArchive}
+              dimmed={(section as Section).dimmed}
+            />
+          )}
+          renderSectionHeader={({ section }) => (
+            <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                {(section as Section).title}
+              </Text>
+              {(section as Section).subtitle && (
+                <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+                  {(section as Section).subtitle}
+                </Text>
+              )}
+            </View>
+          )}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          stickySectionHeadersEnabled={false}
+        />
+      )}
 
       {/* Modal de creación */}
       <Modal
         visible={showForm}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setShowForm(false)}
+        onRequestClose={() => { setShowForm(false); setPrefillForm(undefined) }}
       >
         <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
           <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Nuevo hábito</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              {prefillForm ? 'Confirmar hábito' : 'Nuevo hábito'}
+            </Text>
           </View>
           <HabitForm
             onSubmit={handleCreate}
-            onCancel={() => setShowForm(false)}
+            onCancel={() => { setShowForm(false); setPrefillForm(undefined) }}
+            initial={prefillForm}
           />
         </SafeAreaView>
       </Modal>
+
+      {/* Modal de plantillas */}
+      <HabitTemplatesModal
+        visible={showTemplates}
+        onClose={() => setShowTemplates(false)}
+        onSelect={handleTemplateSelect}
+      />
     </SafeAreaView>
   )
 }
@@ -148,6 +325,21 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -0.5,
   },
+  actions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'center',
+  },
+  templatesBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    borderWidth: 1,
+  },
+  templatesBtnText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: '600',
+  },
   addBtn: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -161,10 +353,22 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl,
-    gap: spacing.sm,
+  },
+  sectionHeader: {
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
+  sectionTitle: {
+    fontSize: typography.sizes.lg,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+  sectionSubtitle: {
+    fontSize: typography.sizes.xs,
+    marginTop: 2,
   },
   habitCard: {
-    marginBottom: 0,
+    marginBottom: spacing.sm,
   },
   habitRow: {
     flexDirection: 'row',
@@ -202,8 +406,19 @@ const styles = StyleSheet.create({
   difficultyText: {
     fontSize: typography.sizes.xs,
   },
+  schedulePill: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+  },
+  schedulePillText: {
+    fontSize: typography.sizes.xs,
+    fontWeight: '600',
+  },
   emptyState: {
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     padding: spacing.xxl,
     gap: spacing.md,
   },
@@ -217,6 +432,17 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  emptyTemplatesBtn: {
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: radius.full,
+  },
+  emptyTemplatesBtnText: {
+    color: '#fff',
+    fontSize: typography.sizes.md,
+    fontWeight: '700',
   },
   modalContainer: { flex: 1 },
   modalHeader: {

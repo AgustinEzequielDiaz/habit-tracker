@@ -16,6 +16,8 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Supabase puede requerir confirmación de email antes de que la sesión sea activa
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false)
 
   const handleRegister = async () => {
     if (!displayName.trim() || !email.trim() || !password) {
@@ -30,7 +32,7 @@ export default function RegisterScreen() {
     setLoading(true)
     setError(null)
 
-    const { error: authError } = await supabase.auth.signUp({
+    const { data, error: authError } = await supabase.auth.signUp({
       email: email.trim(),
       password,
       options: {
@@ -39,8 +41,20 @@ export default function RegisterScreen() {
     })
 
     setLoading(false)
-    if (authError) setError(authError.message)
-    // El redirect lo maneja el listener en _layout.tsx
+
+    if (authError) {
+      setError(authError.message)
+      return
+    }
+
+    // Si session es null pero user existe, Supabase requiere confirmación de email
+    if (data.user && !data.session) {
+      setAwaitingConfirmation(true)
+      return
+    }
+
+    // Si hay sesión activa (confirmación desactivada en Supabase), el redirect
+    // lo maneja el listener de onAuthStateChange en _layout.tsx
   }
 
   const inputStyle = {
@@ -48,6 +62,37 @@ export default function RegisterScreen() {
     color: colors.text,
     borderColor: colors.border,
     fontSize: typography.sizes.md,
+  }
+
+  // Pantalla de espera de confirmación de email
+  if (awaitingConfirmation) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.confirmationContent}>
+          <Text style={styles.confirmEmoji}>📧</Text>
+          <Text style={[styles.confirmTitle, { color: colors.text }]}>
+            Revisá tu email
+          </Text>
+          <Text style={[styles.confirmSubtitle, { color: colors.textSecondary }]}>
+            Te enviamos un link de confirmación a{'\n'}
+            <Text style={{ color: colors.primary, fontWeight: '600' }}>{email}</Text>
+            {'\n\n'}Hacé click en el link para activar tu cuenta y luego iniciá sesión.
+          </Text>
+          <Button
+            label="Ir a iniciar sesión"
+            variant="primary"
+            size="lg"
+            fullWidth
+            onPress={() => router.replace('/(auth)/login')}
+          />
+          <TouchableOpacity onPress={() => setAwaitingConfirmation(false)}>
+            <Text style={[styles.backLink, { color: colors.textSecondary }]}>
+              ← Volver al registro
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    )
   }
 
   return (
@@ -137,4 +182,16 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md },
   error: { fontSize: typography.sizes.sm, textAlign: 'center' },
   switchText: { textAlign: 'center', fontSize: typography.sizes.sm, marginTop: spacing.md },
+  // Confirmation screen
+  confirmationContent: {
+    flex: 1,
+    padding: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xl,
+  },
+  confirmEmoji: { fontSize: 72, lineHeight: 84 },
+  confirmTitle: { fontSize: typography.sizes.xxxl, fontWeight: '800', textAlign: 'center', letterSpacing: -1 },
+  confirmSubtitle: { fontSize: typography.sizes.md, textAlign: 'center', lineHeight: 26 },
+  backLink: { fontSize: typography.sizes.sm, marginTop: spacing.sm },
 })

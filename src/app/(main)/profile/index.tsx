@@ -10,16 +10,20 @@ import { AchievementCard } from '@/components/gamification/AchievementCard'
 import { useTheme } from '@/hooks/useTheme'
 import { spacing, typography, radius } from '@/constants/theme'
 import { ACHIEVEMENTS, LEVEL_NAMES } from '@/constants/achievements'
+import { useHabitsStore } from '@/stores/habits.store'
 import { UserAchievement } from '@/types'
+import { StreakFreezeWidget } from '@/components/gamification/StreakFreezeWidget'
 
 export default function ProfileScreen() {
   const { colors } = useTheme()
-  const { user, level, levelProgress, xpToNextLevel, loadUser } = useUserStore()
+  const { user, level, levelProgress, xpToNextLevel } = useUserStore()
+  const { habits, loadHabits } = useHabitsStore()
   const [achievements, setAchievements] = useState<UserAchievement[]>([])
 
   useEffect(() => {
     loadAchievements()
-  }, [])
+    loadHabits()
+  }, [user?.id])  // Re-ejecutar si cambia el usuario autenticado
 
   const loadAchievements = async () => {
     if (!user) return
@@ -95,6 +99,9 @@ export default function ProfileScreen() {
             </Card>
           ))}
         </View>
+
+        {/* Streak Freeze */}
+        <StreakFreezeWidget />
 
         {/* Logros */}
         <View style={styles.section}>

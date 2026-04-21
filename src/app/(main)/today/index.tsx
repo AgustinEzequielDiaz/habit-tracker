@@ -11,10 +11,10 @@ import { HabitCard } from '@/components/habits/HabitCard'
 import { ScoreRing } from '@/components/stats/ScoreRing'
 import { XPProgressBar } from '@/components/gamification/XPProgressBar'
 import { Card } from '@/components/ui/Card'
+import { MotivationCard } from '@/components/ui/MotivationCard'
 import { useTheme } from '@/hooks/useTheme'
 import { spacing, typography, radius } from '@/constants/theme'
 import { formatDisplayDate, todayString } from '@/utils/date'
-import { HabitWithCompletion } from '@/types'
 
 export default function TodayScreen() {
   const { colors } = useTheme()
@@ -31,9 +31,9 @@ export default function TodayScreen() {
 
   const loadData = useCallback(async () => {
     await Promise.all([loadHabits(), loadTodayCompletions(), loadRecentCompletions()])
-  }, [])
+  }, [loadHabits, loadTodayCompletions, loadRecentCompletions])
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => { loadData() }, [loadData])
 
   const onRefresh = async () => {
     setRefreshing(true)
@@ -56,6 +56,9 @@ export default function TodayScreen() {
     if (hour < 18) return 'Buenas tardes'
     return 'Buenas noches'
   }
+
+  // Mayor racha activa entre todos los hábitos
+  const maxStreak = habits.reduce((max, h) => Math.max(max, h.current_streak ?? 0), 0)
 
   const renderHeader = () => (
     <View style={styles.header}>
@@ -129,6 +132,15 @@ export default function TodayScreen() {
           </View>
         )}
       </Card>
+
+      {/* ── Tarjeta de motivación dinámica ── */}
+      <MotivationCard
+        completedCount={completedCount}
+        totalHabits={habits.length}
+        currentStreak={maxStreak}
+        globalScore={user?.global_score ?? 0}
+        displayName={user?.display_name}
+      />
 
       {/* Título de la lista */}
       <Text style={[styles.listTitle, { color: colors.textSecondary }]}>

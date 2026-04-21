@@ -1,5 +1,21 @@
 node_modules/
-.env
 .expo/
 dist/
-build/
+web-build/
+expo-env.d.ts
+
+# Variables de entorno — nunca commitear
+.env
+.env.local
+.env.production
+
+# Credenciales nativas
+google-services.json
+GoogleService-Info.plist
+
+# EAS
+eas.json
+
+# OS
+.DS_Store
+*.log

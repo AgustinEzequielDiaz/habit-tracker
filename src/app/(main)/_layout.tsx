@@ -31,6 +31,11 @@ export default function MainLayout() {
         },
       }}
     >
+      {/*
+        Expo Router v4: cuando el screen vive en today/index.tsx (subdirectorio),
+        el nombre del screen es "today/index", no "today".
+        Si el archivo estuviese en today.tsx directamente, sería "today".
+      */}
       <Tabs.Screen
         name="today/index"
         options={{

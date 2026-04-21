@@ -14,27 +14,41 @@ SplashScreen.preventAutoHideAsync()
 export default function RootLayout() {
   const scheme = useColorScheme()
   const { setUser } = useUserStore()
-  useSync()  // Inicializa el listener de red globalmente
+  useSync()
 
   useEffect(() => {
-    // Listener de sesión de Supabase
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        // Usuario autenticado: cargar perfil
-        const { data } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
-        if (data) setUser(data)
-      } else {
+    // Fallback: ocultar splash a los 5s si el listener de auth no responde
+    // (lo ponemos dentro del useEffect para evitar re-timers en hot reload)
+    const splashFallback = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {})
+    }, 5000)
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      try {
+        if (session?.user) {
+          const { data } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single()
+          if (data) setUser(data as any)
+        } else {
+          setUser(null)
+        }
+      } catch (e) {
+        console.warn('Auth state change error:', e)
         setUser(null)
+      } finally {
+        clearTimeout(splashFallback)
+        SplashScreen.hideAsync().catch(() => {})
       }
-      SplashScreen.hideAsync()
     })
 
-    return () => subscription.unsubscribe()
-  }, [])
+    return () => {
+      clearTimeout(splashFallback)
+      subscription.unsubscribe()
+    }
+  }, [setUser])
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

@@ -11,8 +11,10 @@ import {
 } from 'react-native'
 import { CreateHabitForm, HabitCategory, HabitDifficulty, HabitType } from '@/types'
 import { Button } from '@/components/ui/Button'
+import { HabitSchedulePicker } from '@/components/ui/HabitSchedulePicker'
 import { useTheme } from '@/hooks/useTheme'
-import { spacing, radius, typography, HABIT_COLORS, HABIT_ICONS } from '@/constants/theme'
+import { spacing, radius, typography, HABIT_COLORS } from '@/constants/theme'
+import { todayString } from '@/utils/date'
 
 interface HabitFormProps {
   initial?: Partial<CreateHabitForm>
@@ -35,7 +37,7 @@ const DIFFICULTIES: { key: HabitDifficulty; label: string; desc: string }[] = [
 ]
 
 export function HabitForm({ initial, onSubmit, onCancel, submitLabel = 'Crear hábito' }: HabitFormProps) {
-  const { colors, isDark } = useTheme()
+  const { colors } = useTheme()
   const [loading, setLoading] = useState(false)
 
   const [name, setName] = useState(initial?.name ?? '')
@@ -45,6 +47,13 @@ export function HabitForm({ initial, onSubmit, onCancel, submitLabel = 'Crear h�
   const [color, setColor] = useState(initial?.color ?? HABIT_COLORS[0])
   const [icon, setIcon] = useState(initial?.icon ?? 'star')
   const [error, setError] = useState<string | null>(null)
+
+  // Scheduling
+  const [showSchedule, setShowSchedule] = useState(
+    !!(initial?.start_date && initial.start_date !== todayString()) || !!initial?.end_date
+  )
+  const [startDate, setStartDate] = useState(initial?.start_date ?? todayString())
+  const [endDate, setEndDate] = useState<string | null>(initial?.end_date ?? null)
 
   const handleSubmit = async () => {
     if (!name.trim()) {
@@ -56,7 +65,16 @@ export function HabitForm({ initial, onSubmit, onCancel, submitLabel = 'Crear h�
     setError(null)
 
     try {
-      await onSubmit({ name: name.trim(), category, type, difficulty, color, icon })
+      await onSubmit({
+        name: name.trim(),
+        category,
+        type,
+        difficulty,
+        color,
+        icon,
+        start_date: startDate,
+        end_date: endDate,
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al guardar')
     } finally {
@@ -70,6 +88,26 @@ export function HabitForm({ initial, onSubmit, onCancel, submitLabel = 'Crear h�
     borderColor: colors.border,
     fontSize: typography.sizes.md,
   }
+
+  // Resumen del schedule para mostrar en el botón colapsable
+  const scheduleSummary = (() => {
+    const today = todayString()
+    const parts: string[] = []
+    if (startDate && startDate !== today) {
+      const diffDays = Math.round(
+        (new Date(startDate).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24)
+      )
+      if (diffDays === 1) parts.push('Empieza mañana')
+      else if (diffDays > 0) parts.push(`Empieza en ${diffDays}d`)
+    }
+    if (endDate) {
+      const diffDays = Math.round(
+        (new Date(endDate).getTime() - new Date(startDate || today).getTime()) / (1000 * 60 * 60 * 24)
+      )
+      parts.push(`${diffDays} días`)
+    }
+    return parts.length > 0 ? parts.join(' · ') : 'Sin programar'
+  })()
 
   return (
     <KeyboardAvoidingView
@@ -183,6 +221,41 @@ export function HabitForm({ initial, onSubmit, onCancel, submitLabel = 'Crear h�
           </View>
         </View>
 
+        {/* ── Programar (colapsable) ── */}
+        <View style={[styles.scheduleCard, { borderColor: showSchedule ? colors.primary : colors.border, backgroundColor: showSchedule ? `${colors.primary}06` : colors.surface }]}>
+          <TouchableOpacity
+            onPress={() => setShowSchedule(!showSchedule)}
+            style={styles.scheduleToggleRow}
+            activeOpacity={0.7}
+          >
+            <View style={styles.scheduleToggleLeft}>
+              <Text style={styles.scheduleIcon}>🗓️</Text>
+              <View>
+                <Text style={[styles.scheduleToggleTitle, { color: colors.text }]}>
+                  Programar
+                </Text>
+                <Text style={[styles.scheduleToggleSub, { color: colors.textSecondary }]}>
+                  {scheduleSummary}
+                </Text>
+              </View>
+            </View>
+            <Text style={[styles.scheduleChevron, { color: colors.textSecondary }]}>
+              {showSchedule ? '▲' : '▼'}
+            </Text>
+          </TouchableOpacity>
+
+          {showSchedule && (
+            <View style={[styles.schedulePicker, { borderTopColor: colors.border }]}>
+              <HabitSchedulePicker
+                startDate={startDate}
+                endDate={endDate}
+                onChangeStart={setStartDate}
+                onChangeEnd={setEndDate}
+              />
+            </View>
+          )}
+        </View>
+
         {/* Error */}
         {error && (
           <Text style={[styles.error, { color: colors.error }]}>{error}</Text>
@@ -280,6 +353,43 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
   },
+  // ── Programar ──
+  scheduleCard: {
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+  },
+  scheduleToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.md,
+  },
+  scheduleToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  scheduleIcon: {
+    fontSize: 20,
+  },
+  scheduleToggleTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: '700',
+  },
+  scheduleToggleSub: {
+    fontSize: typography.sizes.xs,
+    marginTop: 2,
+  },
+  scheduleChevron: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  schedulePicker: {
+    borderTopWidth: 1,
+    padding: spacing.md,
+  },
+  // ──
   error: {
     fontSize: typography.sizes.sm,
     textAlign: 'center',

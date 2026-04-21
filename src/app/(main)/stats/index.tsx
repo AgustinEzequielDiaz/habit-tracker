@@ -1,54 +1,76 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, SafeAreaView, ActivityIndicator,
 } from 'react-native'
 import { supabase } from '@/services/supabase'
 import { HeatmapGrid } from '@/components/stats/HeatmapGrid'
 import { ScoreRing } from '@/components/stats/ScoreRing'
+import { WeeklyChart } from '@/components/stats/WeeklyChart'
+import { InsightsCard } from '@/components/stats/InsightsCard'
 import { Card } from '@/components/ui/Card'
 import { useUserStore } from '@/stores/user.store'
 import { useHabitsStore } from '@/stores/habits.store'
 import { useTheme } from '@/hooks/useTheme'
 import { spacing, typography } from '@/constants/theme'
-import { DailySummary } from '@/types'
+import { DailySummary, HabitCompletion } from '@/types'
 import { getLast30Days, formatShortDate } from '@/utils/date'
 
 export default function StatsScreen() {
   const { colors } = useTheme()
   const { user } = useUserStore()
-  const { habits } = useHabitsStore()
+  const { habits, loadHabits } = useHabitsStore()
   const [summaries, setSummaries] = useState<DailySummary[]>([])
+  const [completions, setCompletions] = useState<HabitCompletion[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedDay, setSelectedDay] = useState<DailySummary | null>(null)
 
-  useEffect(() => {
-    loadSummaries()
-  }, [])
-
-  const loadSummaries = async () => {
+  const loadAll = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from('daily_summaries')
-      .select('*')
-      .order('summary_date', { ascending: false })
-      .limit(365)
-    setSummaries((data ?? []) as DailySummary[])
-    setLoading(false)
-  }
+    await loadHabits()
 
-  // Stats de los últimos 30 días
+    const thirtyDaysAgo = getLast30Days()[0]
+
+    const [summaryRes, completionRes] = await Promise.all([
+      supabase
+        .from('daily_summaries')
+        .select('*')
+        .order('summary_date', { ascending: false })
+        .limit(365),
+      supabase
+        .from('habit_completions')
+        .select('habit_id, completed_date')
+        .gte('completed_date', thirtyDaysAgo),
+    ])
+
+    setSummaries((summaryRes.data ?? []) as DailySummary[])
+    setCompletions((completionRes.data ?? []) as HabitCompletion[])
+    setLoading(false)
+  }, [loadHabits])
+
+  useEffect(() => {
+    loadAll()
+  }, [loadAll])
+
+  // Stats globales de los últimos 30 días
   const last30 = getLast30Days()
   const summaryMap = new Map(summaries.map((s) => [s.summary_date, s]))
+  const daysWithData = last30.map((d) => summaryMap.get(d)).filter(Boolean) as DailySummary[]
 
-  const last30Summaries = last30.map((d) => summaryMap.get(d))
-  const daysWithData = last30Summaries.filter(Boolean) as DailySummary[]
   const avgCompletion = daysWithData.length > 0
     ? daysWithData.reduce((sum, s) => sum + s.completion_rate, 0) / daysWithData.length
     : 0
   const perfectDays = daysWithData.filter((s) => s.completion_rate >= 100).length
   const totalXpLast30 = daysWithData.reduce((sum, s) => sum + s.xp_earned, 0)
-
   const bestStreak = user?.streak_best ?? 0
+
+  // Mapa de completions por hábito para la sección "Por hábito"
+  const completionsByHabit = new Map<string, Set<string>>()
+  for (const c of completions) {
+    if (!completionsByHabit.has(c.habit_id)) {
+      completionsByHabit.set(c.habit_id, new Set())
+    }
+    completionsByHabit.get(c.habit_id)!.add(c.completed_date)
+  }
 
   if (loading) {
     return (
@@ -64,7 +86,6 @@ export default function StatsScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <Text style={[styles.title, { color: colors.text }]}>Estadísticas</Text>
 
         {/* Score global */}
@@ -87,6 +108,26 @@ export default function StatsScreen() {
           </View>
         </Card>
 
+        {/* ── NUEVO: Gráfico semanal ── */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Últimos 7 días</Text>
+          <Card>
+            <WeeklyChart summaries={summaries} />
+          </Card>
+        </View>
+
+        {/* ── NUEVO: Insights ── */}
+        {(summaries.length > 3 || completions.length > 0) && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Insights</Text>
+            <InsightsCard
+              summaries={summaries}
+              completions={completions}
+              habits={habits}
+            />
+          </View>
+        )}
+
         {/* Heatmap */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Actividad del año</Text>
@@ -94,7 +135,7 @@ export default function StatsScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <HeatmapGrid
                 summaries={summaries}
-                onDayPress={(summary, date) => setSelectedDay(summary)}
+                onDayPress={(summary) => setSelectedDay(summary)}
               />
             </ScrollView>
           </Card>
@@ -120,15 +161,14 @@ export default function StatsScreen() {
           </Card>
         )}
 
-        {/* Por hábito */}
+        {/* Por hábito — últimos 30 días */}
         {habits.length > 0 && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Por hábito (30 días)</Text>
             {habits.map((habit) => {
-              const habitCompletions = summaries.filter((s) =>
-                last30.includes(s.summary_date)
-              ).length
-              const rate = last30.length > 0 ? (habitCompletions / last30.length) * 100 : 0
+              const doneSet = completionsByHabit.get(habit.id) ?? new Set<string>()
+              const doneCount = last30.filter((d) => doneSet.has(d)).length
+              const rate = last30.length > 0 ? (doneCount / last30.length) * 100 : 0
 
               return (
                 <Card key={habit.id} style={styles.habitStatCard} padding={spacing.md}>
@@ -203,11 +243,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.3,
   },
-  selectedDay: {
-    borderWidth: 1,
-  },
+  selectedDay: { borderWidth: 1 },
   selectedDayDate: { fontSize: typography.sizes.sm, fontWeight: '600' },
-  selectedDayStats: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.xs },
+  selectedDayStats: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.xs, flexWrap: 'wrap' },
   selectedDayStat: { fontSize: typography.sizes.sm, fontWeight: '600' },
   habitStatCard: { marginBottom: 0 },
   habitStatRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
