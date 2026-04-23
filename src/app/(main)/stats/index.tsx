@@ -165,19 +165,41 @@ export default function StatsScreen() {
         {habits.length > 0 && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Por hábito (30 días)</Text>
-            {habits.map((habit) => {
+            {habits
+              .slice()
+              .sort((a, b) => {
+                const aSet = completionsByHabit.get(a.id) ?? new Set<string>()
+                const bSet = completionsByHabit.get(b.id) ?? new Set<string>()
+                const aRate = last30.filter((d) => aSet.has(d)).length
+                const bRate = last30.filter((d) => bSet.has(d)).length
+                return bRate - aRate
+              })
+              .map((habit) => {
               const doneSet = completionsByHabit.get(habit.id) ?? new Set<string>()
               const doneCount = last30.filter((d) => doneSet.has(d)).length
               const rate = last30.length > 0 ? (doneCount / last30.length) * 100 : 0
+              const streak = habit.current_streak ?? 0
 
               return (
                 <Card key={habit.id} style={styles.habitStatCard} padding={spacing.md}>
                   <View style={styles.habitStatRow}>
-                    <View style={[styles.habitDot, { backgroundColor: habit.color }]} />
-                    <Text style={[styles.habitStatName, { color: colors.text }]} numberOfLines={1}>
-                      {habit.name}
-                    </Text>
-                    <View style={styles.habitStatRight}>
+                    <View style={[styles.habitColorBar, { backgroundColor: habit.color }]} />
+                    <View style={styles.habitStatBody}>
+                      <View style={styles.habitStatTopRow}>
+                        <Text style={[styles.habitStatName, { color: colors.text }]} numberOfLines={1}>
+                          {habit.name}
+                        </Text>
+                        <View style={styles.habitStatMeta}>
+                          {streak >= 2 && (
+                            <Text style={[styles.habitStreak, { color: colors.streak }]}>
+                              🔥 {streak}
+                            </Text>
+                          )}
+                          <Text style={[styles.habitStatPercent, { color: rate >= 70 ? colors.success : rate >= 40 ? colors.warning : colors.textSecondary }]}>
+                            {Math.round(rate)}%
+                          </Text>
+                        </View>
+                      </View>
                       <View style={[styles.habitStatBar, { backgroundColor: colors.surface }]}>
                         <View
                           style={[
@@ -186,9 +208,6 @@ export default function StatsScreen() {
                           ]}
                         />
                       </View>
-                      <Text style={[styles.habitStatPercent, { color: colors.textSecondary }]}>
-                        {Math.round(rate)}%
-                      </Text>
                     </View>
                   </View>
                 </Card>
@@ -248,11 +267,14 @@ const styles = StyleSheet.create({
   selectedDayStats: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.xs, flexWrap: 'wrap' },
   selectedDayStat: { fontSize: typography.sizes.sm, fontWeight: '600' },
   habitStatCard: { marginBottom: 0 },
-  habitStatRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  habitDot: { width: 10, height: 10, borderRadius: 5 },
-  habitStatName: { flex: 1, fontSize: typography.sizes.sm, fontWeight: '500' },
-  habitStatRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, width: 120 },
-  habitStatBar: { flex: 1, height: 6, borderRadius: 3, overflow: 'hidden' },
+  habitStatRow: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.sm },
+  habitColorBar: { width: 3, borderRadius: 2, minHeight: 40 },
+  habitStatBody: { flex: 1, gap: 6 },
+  habitStatTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  habitStatName: { flex: 1, fontSize: typography.sizes.sm, fontWeight: '600' },
+  habitStatMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  habitStreak: { fontSize: typography.sizes.xs, fontWeight: '700' },
+  habitStatBar: { height: 6, borderRadius: 3, overflow: 'hidden' },
   habitStatFill: { height: '100%', borderRadius: 3 },
-  habitStatPercent: { fontSize: typography.sizes.xs, width: 30, textAlign: 'right' },
+  habitStatPercent: { fontSize: typography.sizes.xs, fontWeight: '700', minWidth: 30, textAlign: 'right' },
 })

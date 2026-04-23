@@ -15,7 +15,10 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.yourname.habittracker",
       "infoPlist": {
-        "UIBackgroundModes": ["fetch", "remote-notification"]
+        "UIBackgroundModes": [
+          "fetch",
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -51,7 +54,8 @@
           "image": "./assets/splash.png",
           "imageWidth": 200
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true

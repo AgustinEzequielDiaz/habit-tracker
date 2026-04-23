@@ -147,7 +147,67 @@ function computeInsights(
     }
   }
 
-  return insights.slice(0, 4) // máximo 4 insights
+  // ── 6. Riesgo de abandono: 0 completions en los últimos 7 días ──
+  if (habits.length > 0 && last7.length > 0) {
+    const completionLast7 = completions.filter((c) => last7.includes(c.completed_date))
+    const countByHabitLast7: Record<string, number> = {}
+    for (const c of completionLast7) {
+      countByHabitLast7[c.habit_id] = (countByHabitLast7[c.habit_id] ?? 0) + 1
+    }
+    // Hábitos con 0 completions en los últimos 7 días (y que tienen al menos 14 días de historia)
+    const atRiskHabits = habits.filter((h) => {
+      const last7Count = countByHabitLast7[h.id] ?? 0
+      return last7Count === 0
+    })
+    if (atRiskHabits.length === 1) {
+      insights.push({
+        icon: '🚨',
+        title: `Riesgo de abandono: ${atRiskHabits[0].name}`,
+        detail: 'Sin completar en 7 días. Una pequeña acción hoy puede reactivar el hábito.',
+        type: 'warning',
+      })
+    } else if (atRiskHabits.length > 1) {
+      insights.push({
+        icon: '🚨',
+        title: `${atRiskHabits.length} hábitos sin actividad esta semana`,
+        detail: `${atRiskHabits.map((h) => h.name).slice(0, 2).join(', ')}${atRiskHabits.length > 2 ? ` y ${atRiskHabits.length - 2} más` : ''}`,
+        type: 'warning',
+      })
+    }
+  }
+
+  // ── 7. Correlación simple: tasa alta cuando el primer hábito se completa ──
+  if (habits.length >= 2) {
+    // Encontrar el hábito con más completions (ancla)
+    const countByHabit: Record<string, number> = {}
+    for (const c of completions) {
+      countByHabit[c.habit_id] = (countByHabit[c.habit_id] ?? 0) + 1
+    }
+    const anchorHabit = habits.reduce((best, h) =>
+      (countByHabit[h.id] ?? 0) > (countByHabit[best.id] ?? 0) ? h : best
+    )
+    const anchorCompletionDates = new Set(
+      completions.filter((c) => c.habit_id === anchorHabit.id).map((c) => c.completed_date)
+    )
+    // Días donde se completó el hábito ancla
+    const anchorDays = last30.filter((d) => anchorCompletionDates.has(d))
+    if (anchorDays.length >= 5) {
+      const totalCompletionsOnAnchorDays = completions.filter(
+        (c) => anchorCompletionDates.has(c.completed_date) && c.habit_id !== anchorHabit.id
+      ).length
+      const avgOthersOnAnchorDays = totalCompletionsOnAnchorDays / anchorDays.length / Math.max(habits.length - 1, 1)
+      if (avgOthersOnAnchorDays > 0.65) {
+        insights.push({
+          icon: '🔗',
+          title: `${anchorHabit.name} impulsa tus demás hábitos`,
+          detail: `Cuando completás este hábito, completás ${Math.round(avgOthersOnAnchorDays * 100)}% de tus otros hábitos`,
+          type: 'positive',
+        })
+      }
+    }
+  }
+
+  return insights.slice(0, 5) // máximo 5 insights en V3
 }
 
 export function InsightsCard({ summaries, completions, habits }: InsightsCardProps) {

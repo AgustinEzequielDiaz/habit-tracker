@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { useColorScheme } from 'react-native'
 import { supabase } from '@/services/supabase'
 import { useUserStore } from '@/stores/user.store'
+import { useSettingsStore } from '@/stores/settings.store'
 import { useSync } from '@/hooks/useSync'
 
 SplashScreen.preventAutoHideAsync()
@@ -14,7 +15,11 @@ SplashScreen.preventAutoHideAsync()
 export default function RootLayout() {
   const scheme = useColorScheme()
   const { setUser } = useUserStore()
+  const { hydrate } = useSettingsStore()
   useSync()
+
+  // Cargar preferencias del usuario al arrancar la app
+  useEffect(() => { hydrate() }, [])
 
   useEffect(() => {
     // Fallback: ocultar splash a los 5s si el listener de auth no responde

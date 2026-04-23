@@ -1,10 +1,11 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useEffect } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   withSequence,
+  interpolateColor,
 } from 'react-native-reanimated'
 import { HabitWithCompletion } from '@/types'
 import { HabitCheckbox } from './HabitCheckbox'
@@ -17,6 +18,8 @@ interface HabitCardProps {
   habit: HabitWithCompletion
   onToggle: (habitId: string, value?: number) => void
   onPress?: (habit: HabitWithCompletion) => void
+  onRequestValue?: (habit: HabitWithCompletion) => void  // para hábitos medibles/tiempo
+  atRisk?: boolean   // sin completar en los últimos 7 días
   disabled?: boolean
 }
 
@@ -37,28 +40,58 @@ function getDaysRemaining(endDate?: string | null): number | null {
   return diff
 }
 
-export function HabitCard({ habit, onToggle, onPress, disabled }: HabitCardProps) {
+export function HabitCard({ habit, onToggle, onPress, onRequestValue, atRisk, disabled }: HabitCardProps) {
   const { colors } = useTheme()
   const feedbackOpacity = useSharedValue(0)
+  const completedProgress = useSharedValue(habit.isCompleted ? 1 : 0)
   const daysRemaining = getDaysRemaining(habit.end_date)
+  const isMeasurable = habit.type === 'measurable' || habit.type === 'timed'
+
+  // Valor actual de la completion (para hábitos medibles)
+  const currentValue = habit.completion?.value ?? null
+  const targetValue = habit.target_value
+  const valueProgress = isMeasurable && targetValue && currentValue !== null
+    ? Math.min(currentValue / targetValue, 1)
+    : null
+
+  // Animar el fondo del card cuando cambia isCompleted
+  useEffect(() => {
+    completedProgress.value = withTiming(habit.isCompleted ? 1 : 0, { duration: 300 })
+  }, [habit.isCompleted])
 
   const handleToggle = useCallback(() => {
+    // Para hábitos medibles/tiempo no completados: pedir valor
+    if (isMeasurable && !habit.isCompleted && onRequestValue) {
+      onRequestValue(habit)
+      return
+    }
+
     onToggle(habit.id)
 
     if (!habit.isCompleted) {
-      // Animación de feedback al completar
       feedbackOpacity.value = withSequence(
-        withTiming(1, { duration: 150 }),
-        withTiming(0, { duration: 400 })
+        withTiming(1, { duration: 100 }),
+        withTiming(0, { duration: 350 })
       )
     }
-  }, [habit.id, habit.isCompleted, onToggle])
+  }, [habit.id, habit.isCompleted, habit.type, onToggle, onRequestValue, isMeasurable])
 
   const feedbackStyle = useAnimatedStyle(() => ({
     opacity: feedbackOpacity.value,
   }))
 
-  const cardBg = habit.isCompleted ? `${habit.color}15` : colors.card
+  const cardBgStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      completedProgress.value,
+      [0, 1],
+      [colors.card, `${habit.color}14`]
+    ),
+    borderColor: interpolateColor(
+      completedProgress.value,
+      [0, 1],
+      [colors.border, `${habit.color}40`]
+    ),
+  }))
 
   return (
     <TouchableOpacity
@@ -66,14 +99,11 @@ export function HabitCard({ habit, onToggle, onPress, disabled }: HabitCardProps
       activeOpacity={0.8}
       disabled={!onPress}
     >
-      <View
+      <Animated.View
         style={[
           styles.card,
-          {
-            backgroundColor: cardBg,
-            borderColor: habit.isCompleted ? `${habit.color}40` : colors.border,
-            borderWidth: 1,
-          },
+          { borderWidth: 1 },
+          cardBgStyle,
         ]}
       >
         {/* Feedback flash al completar */}
@@ -107,13 +137,33 @@ export function HabitCard({ habit, onToggle, onPress, disabled }: HabitCardProps
               </Text>
               <Text style={[styles.category, { color: colors.textSecondary }]}>
                 {CATEGORY_LABELS[habit.category]}
-                {habit.type !== 'binary' && habit.target_value
-                  ? ` · ${habit.target_value} ${habit.unit ?? ''}`
+                {isMeasurable && targetValue
+                  ? ` · ${currentValue !== null ? `${currentValue}/` : ''}${targetValue} ${habit.unit ?? (habit.type === 'timed' ? 'min' : '')}`
                   : ''}
               </Text>
+              {/* Barra de progreso para hábitos medibles */}
+              {isMeasurable && targetValue && valueProgress !== null && (
+                <View style={[styles.measurableTrack, { backgroundColor: colors.surface }]}>
+                  <View
+                    style={[
+                      styles.measurableFill,
+                      {
+                        backgroundColor: valueProgress >= 1 ? colors.success : habit.color,
+                        width: `${Math.round(valueProgress * 100)}%`,
+                      },
+                    ]}
+                  />
+                </View>
+              )}
             </View>
 
             <View style={styles.rightSection}>
+              {/* Badge de riesgo de abandono */}
+              {atRisk && !habit.isCompleted && (
+                <View style={[styles.riskBadge, { backgroundColor: '#EF444415' }]}>
+                  <Text style={[styles.riskBadgeText, { color: '#EF4444' }]}>⚠️</Text>
+                </View>
+              )}
               {/* Badge de días restantes (solo si quedan ≤7 días) */}
               {daysRemaining !== null && daysRemaining <= 7 && (
                 <View style={[
@@ -152,7 +202,7 @@ export function HabitCard({ habit, onToggle, onPress, disabled }: HabitCardProps
             </View>
           </View>
         </View>
-      </View>
+      </Animated.View>
     </TouchableOpacity>
   )
 }
@@ -210,5 +260,25 @@ const styles = StyleSheet.create({
   daysRemainingText: {
     fontSize: 10,
     fontWeight: '700',
+  },
+  measurableTrack: {
+    height: 4,
+    borderRadius: radius.full,
+    marginTop: 5,
+    overflow: 'hidden',
+  },
+  measurableFill: {
+    height: '100%',
+    borderRadius: radius.full,
+  },
+  riskBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  riskBadgeText: {
+    fontSize: 12,
   },
 })

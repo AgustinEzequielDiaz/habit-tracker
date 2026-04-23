@@ -36,14 +36,30 @@ const DIFFICULTIES: { key: HabitDifficulty; label: string; desc: string }[] = [
   { key: 'hard',   label: 'Difícil', desc: 'Alto esfuerzo' },
 ]
 
+const HABIT_TYPES: { key: HabitType; label: string; emoji: string; desc: string }[] = [
+  { key: 'binary',     label: 'Hecho / No hecho', emoji: '✅', desc: 'Completado o no' },
+  { key: 'measurable', label: 'Medible',           emoji: '📊', desc: 'Cantidad o repeticiones' },
+  { key: 'timed',      label: 'Por tiempo',        emoji: '⏱',  desc: 'Duración en minutos' },
+]
+
+// Unidades sugeridas por categoría
+const UNIT_SUGGESTIONS: Record<string, string[]> = {
+  fitness:       ['reps', 'kg', 'km', 'min', 'pasos', 'series'],
+  productividad: ['páginas', 'tareas', 'pomodoros', 'min', 'horas'],
+  bienestar:     ['min', 'vasos', 'horas', 'veces'],
+  rutinas:       ['min', 'veces', 'páginas'],
+}
+
 export function HabitForm({ initial, onSubmit, onCancel, submitLabel = 'Crear hábito' }: HabitFormProps) {
   const { colors } = useTheme()
   const [loading, setLoading] = useState(false)
 
   const [name, setName] = useState(initial?.name ?? '')
   const [category, setCategory] = useState<HabitCategory>(initial?.category ?? 'rutinas')
-  const [type] = useState<HabitType>(initial?.type ?? 'binary')
+  const [type, setType] = useState<HabitType>(initial?.type ?? 'binary')
   const [difficulty, setDifficulty] = useState<HabitDifficulty>(initial?.difficulty ?? 'normal')
+  const [targetValue, setTargetValue] = useState(initial?.target_value ? String(initial.target_value) : '')
+  const [unit, setUnit] = useState(initial?.unit ?? '')
   const [color, setColor] = useState(initial?.color ?? HABIT_COLORS[0])
   const [icon, setIcon] = useState(initial?.icon ?? 'star')
   const [error, setError] = useState<string | null>(null)
@@ -65,11 +81,14 @@ export function HabitForm({ initial, onSubmit, onCancel, submitLabel = 'Crear h�
     setError(null)
 
     try {
+      const parsedTarget = targetValue ? parseFloat(targetValue.replace(',', '.')) : undefined
       await onSubmit({
         name: name.trim(),
         category,
         type,
         difficulty,
+        target_value: type !== 'binary' && parsedTarget && !isNaN(parsedTarget) ? parsedTarget : undefined,
+        unit: type === 'timed' ? 'min' : (type === 'measurable' && unit.trim() ? unit.trim() : undefined),
         color,
         icon,
         start_date: startDate,
@@ -131,6 +150,82 @@ export function HabitForm({ initial, onSubmit, onCancel, submitLabel = 'Crear h�
             maxLength={100}
             autoFocus
           />
+        </View>
+
+        {/* Tipo de hábito */}
+        <View style={styles.section}>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Tipo de seguimiento</Text>
+          <View style={styles.typeRow}>
+            {HABIT_TYPES.map((t) => (
+              <TouchableOpacity
+                key={t.key}
+                onPress={() => { setType(t.key); if (t.key === 'timed') setUnit('min') }}
+                style={[
+                  styles.typeChip,
+                  {
+                    backgroundColor: type === t.key ? `${color}18` : colors.surface,
+                    borderColor: type === t.key ? color : colors.border,
+                    borderWidth: type === t.key ? 2 : 1,
+                  },
+                ]}
+              >
+                <Text style={styles.typeEmoji}>{t.emoji}</Text>
+                <Text style={[styles.typeLabel, { color: type === t.key ? color : colors.text }]}>
+                  {t.label}
+                </Text>
+                <Text style={[styles.typeDesc, { color: colors.textSecondary }]}>{t.desc}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Meta numérica — solo para measurable/timed */}
+          {type !== 'binary' && (
+            <View style={styles.targetRow}>
+              <View style={styles.targetInputWrapper}>
+                <Text style={[styles.targetLabel, { color: colors.textSecondary }]}>Meta diaria</Text>
+                <TextInput
+                  value={targetValue}
+                  onChangeText={setTargetValue}
+                  placeholder={type === 'timed' ? '30' : '10'}
+                  placeholderTextColor={colors.textDisabled}
+                  keyboardType="decimal-pad"
+                  style={[styles.targetInput, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
+                />
+              </View>
+              {type === 'measurable' ? (
+                <View style={styles.unitWrapper}>
+                  <Text style={[styles.targetLabel, { color: colors.textSecondary }]}>Unidad</Text>
+                  <TextInput
+                    value={unit}
+                    onChangeText={setUnit}
+                    placeholder="reps, kg, km…"
+                    placeholderTextColor={colors.textDisabled}
+                    style={[styles.targetInput, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
+                    autoCapitalize="none"
+                  />
+                  {/* Sugerencias de unidad */}
+                  <View style={styles.unitSuggestions}>
+                    {(UNIT_SUGGESTIONS[category] ?? []).slice(0, 4).map((u) => (
+                      <TouchableOpacity
+                        key={u}
+                        onPress={() => setUnit(u)}
+                        style={[styles.unitChip, { backgroundColor: unit === u ? `${color}18` : colors.surface, borderColor: unit === u ? color : colors.border }]}
+                      >
+                        <Text style={[styles.unitChipText, { color: unit === u ? color : colors.textSecondary }]}>{u}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              ) : (
+                <View style={[styles.unitWrapper, styles.unitFixed]}>
+                  <Text style={[styles.targetLabel, { color: colors.textSecondary }]}>Unidad</Text>
+                  <View style={[styles.targetInput, styles.unitFixedBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <Text style={[styles.unitFixedText, { color: colors.text }]}>min</Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
         </View>
 
         {/* Categoría */}
@@ -388,6 +483,79 @@ const styles = StyleSheet.create({
   schedulePicker: {
     borderTopWidth: 1,
     padding: spacing.md,
+  },
+  // ── Tipo de hábito ──
+  typeRow: {
+    gap: spacing.sm,
+  },
+  typeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radius.md,
+  },
+  typeEmoji: { fontSize: 18 },
+  typeLabel: {
+    fontSize: typography.sizes.sm,
+    fontWeight: '700',
+    flex: 1,
+  },
+  typeDesc: {
+    fontSize: typography.sizes.xs,
+  },
+  // ── Meta numérica ──
+  targetRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  targetInputWrapper: {
+    gap: 4,
+    width: 90,
+  },
+  unitWrapper: {
+    flex: 1,
+    gap: 4,
+  },
+  unitFixed: {},
+  targetLabel: {
+    fontSize: typography.sizes.xs,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  targetInput: {
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    fontSize: typography.sizes.md,
+    fontWeight: '600',
+  },
+  unitSuggestions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 4,
+  },
+  unitChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.full,
+    borderWidth: 1,
+  },
+  unitChipText: {
+    fontSize: typography.sizes.xs,
+    fontWeight: '600',
+  },
+  unitFixedBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unitFixedText: {
+    fontSize: typography.sizes.md,
+    fontWeight: '700',
   },
   // ──
   error: {

@@ -118,6 +118,9 @@ export const useCompletionsStore = create<CompletionsState>((set, get) => ({
       set({ todayCompletions: [...todayCompletions, optimistic] })
     }
 
+    // Score actualiza INMEDIATAMENTE con el estado optimista — sin esperar red
+    get().recalculateScore()
+
     if (isOnline) {
       try {
         const result = await completionsService.toggle(habitId, isCompleted, today, value)
@@ -130,12 +133,12 @@ export const useCompletionsStore = create<CompletionsState>((set, get) => ({
           }))
         }
 
-        // Recalcular score client-side después de cada toggle exitoso
-        // Esto da feedback visual inmediato sin esperar al cron de la Edge Function
+        // Confirmar score con el ID real (diferencia mínima, pero consistente)
         get().recalculateScore()
       } catch (error) {
-        // Revertir el optimistic update
+        // Revertir el optimistic update y el score
         set({ todayCompletions })
+        get().recalculateScore()
         set({ error: 'Error al sincronizar. Reintentando...' })
       }
     } else {
@@ -175,8 +178,8 @@ export const useCompletionsStore = create<CompletionsState>((set, get) => ({
         // Días anteriores: desde recentCompletions (sin tocar hoy)
         ...recentCompletions.filter((c) => c.completed_date !== today),
         // Hoy: desde todayCompletions (siempre actualizado tras cada toggle)
-        // Excluimos IDs optimistas — solo usamos los ya persistidos en Supabase
-        ...todayCompletions.filter((tc) => !tc.id.startsWith('optimistic_')),
+        // Incluimos optimistas — el score responde al toque, sin esperar red
+        ...todayCompletions,
       ]
 
       // Calcular score global ponderado
@@ -192,11 +195,12 @@ export const useCompletionsStore = create<CompletionsState>((set, get) => ({
         global_score: globalScore,
       })
 
-      // Persistir en Supabase para que el perfil también refleje el valor actual
-      await supabase
+      // Persistir en Supabase fire-and-forget — no bloquea la UI
+      supabase
         .from('users')
         .update({ global_score: globalScore })
         .eq('id', currentUser.id)
+        .then()
 
     } catch (err) {
       // El score fallando no debe bloquear el flujo principal de la app

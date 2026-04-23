@@ -38,28 +38,51 @@ export const habitsService = {
     const nextIndex = existing && existing.length > 0 ? existing[0].order_index + 1 : 0
     const today = todayString()
 
+    // Payload base (siempre disponible sin migración V3)
+    const basePayload = {
+      user_id:      user.user.id,
+      name:         form.name,
+      description:  form.description ?? null,
+      category:     form.category,
+      type:         form.type,
+      difficulty:   form.difficulty,
+      target_value: form.target_value ?? null,
+      unit:         form.unit ?? null,
+      color:        form.color,
+      icon:         form.icon,
+      order_index:  nextIndex,
+    }
+
+    // Intentar con los campos de scheduling (requiere migración V3)
     const { data, error } = await supabase
       .from('habits')
       .insert({
-        user_id:     user.user.id,
-        name:        form.name,
-        description: form.description ?? null,
-        category:    form.category,
-        type:        form.type,
-        difficulty:  form.difficulty,
-        target_value: form.target_value ?? null,
-        unit:        form.unit ?? null,
-        color:       form.color,
-        icon:        form.icon,
-        order_index: nextIndex,
-        // Scheduling: si no se especifica start_date, usa hoy
+        ...basePayload,
         start_date: form.start_date ?? today,
         end_date:   form.end_date ?? null,
       })
       .select()
       .single()
 
-    if (error) throw error
+    // Si Supabase rechaza start_date/end_date (migración no ejecutada),
+    // reintentamos sin esos campos — el hábito se crea igual con defaults.
+    if (error) {
+      const isMissingColumn =
+        error.message.includes('start_date') ||
+        error.message.includes('end_date') ||
+        error.code === '42703' // PostgreSQL: column does not exist
+      if (isMissingColumn) {
+        const { data: data2, error: error2 } = await supabase
+          .from('habits')
+          .insert(basePayload)
+          .select()
+          .single()
+        if (error2) throw error2
+        return data2 as Habit
+      }
+      throw error
+    }
+
     return data as Habit
   },
 

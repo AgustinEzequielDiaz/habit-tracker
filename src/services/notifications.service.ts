@@ -116,4 +116,106 @@ export const notificationsService = {
   async cancelAll(): Promise<void> {
     await Notifications.cancelAllScheduledNotificationsAsync()
   },
+
+  // ─────────────────────────────────────────
+  // Analizar hora óptima basada en historial
+  // Devuelve 'HH:MM' o null si hay pocos datos
+  // ─────────────────────────────────────────
+  analyzeOptimalTime(completions: { completed_at: string }[]): string | null {
+    if (completions.length < 5) return null
+
+    // Extraer la hora de cada completion (solo últimas 30)
+    const recent = completions.slice(-30)
+    const hours = recent.map((c) => {
+      const d = new Date(c.completed_at)
+      return d.getHours() + d.getMinutes() / 60
+    })
+
+    if (hours.length === 0) return null
+
+    // Calcular la mediana para ser robusto ante outliers
+    const sorted = [...hours].sort((a, b) => a - b)
+    const mid = Math.floor(sorted.length / 2)
+    const medianHour = sorted.length % 2 === 0
+      ? (sorted[mid - 1] + sorted[mid]) / 2
+      : sorted[mid]
+
+    // Redondear a cuartos de hora
+    const h = Math.floor(medianHour)
+    const m = Math.round((medianHour % 1) * 60 / 15) * 15
+    const finalH = m === 60 ? h + 1 : h
+    const finalM = m === 60 ? 0 : m
+
+    const hh = String(Math.min(finalH, 23)).padStart(2, '0')
+    const mm = String(finalM).padStart(2, '0')
+    return `${hh}:${mm}`
+  },
+
+  // ─────────────────────────────────────────
+  // Programar notificación diaria local
+  // time: 'HH:MM'
+  // ─────────────────────────────────────────
+  async scheduleDailyReminder(time: string, displayName?: string): Promise<void> {
+    await Notifications.cancelAllScheduledNotificationsAsync()
+
+    const [hours, minutes] = time.split(':').map(Number)
+    if (isNaN(hours) || isNaN(minutes)) return
+
+    const messages = [
+      `¡Hola${displayName ? ` ${displayName.split(' ')[0]}` : ''}! ¿Ya completaste tus hábitos de hoy? 🎯`,
+      '⏰ Es un buen momento para revisar tus hábitos de hoy',
+      '🌟 Cada día cuenta — ¿cómo vas con tus hábitos?',
+      `💪 ${displayName ? `${displayName.split(' ')[0]}, no` : 'No'} olvides tus hábitos de hoy`,
+      '🔥 Mantené tu racha activa — chequeá tus hábitos',
+    ]
+    const randomMsg = messages[Math.floor(Math.random() * messages.length)]
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Habit Tracker',
+        body: randomMsg,
+        sound: true,
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        hour: hours,
+        minute: minutes,
+      },
+    })
+  },
+
+  // ─────────────────────────────────────────
+  // Determinar si el timing aprendido difiere
+  // lo suficiente del configurado (> 30 min)
+  // ─────────────────────────────────────────
+  shouldUpdateTime(currentTime: string, suggestedTime: string): boolean {
+    const toMinutes = (t: string) => {
+      const [h, m] = t.split(':').map(Number)
+      return h * 60 + m
+    }
+    const diff = Math.abs(toMinutes(currentTime) - toMinutes(suggestedTime))
+    return diff > 30
+  },
+
+  // ─────────────────────────────────────────
+  // Anti-fatiga: incrementar contador de ignored
+  // Si ignored_count >= 3, sugerir ajuste de frecuencia
+  // ─────────────────────────────────────────
+  async incrementIgnoredCount(): Promise<number> {
+    const { data: user } = await supabase.auth.getUser()
+    if (!user.user) return 0
+
+    const { data } = await supabase
+      .from('notification_prefs')
+      .select('ignored_count')
+      .eq('user_id', user.user.id)
+      .single()
+
+    const newCount = ((data?.ignored_count ?? 0) as number) + 1
+    await supabase
+      .from('notification_prefs')
+      .upsert({ user_id: user.user.id, ignored_count: newCount }, { onConflict: 'user_id' })
+
+    return newCount
+  },
 }

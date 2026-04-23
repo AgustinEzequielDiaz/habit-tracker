@@ -1,50 +1,66 @@
 import { ColorSchemeName } from 'react-native'
 
 // ─────────────────────────────────────────
-// PALETA DE COLORES
+// PALETA DE COLORES — Violet Warm (V2.2)
+// Filosofía: personal, cálida, menos corporativa.
+// Violet reemplaza a Indigo. Fondo cream en lugar de blanco puro.
 // ─────────────────────────────────────────
 
 const palette = {
-  indigo50:  '#EEF2FF',
-  indigo100: '#E0E7FF',
-  indigo300: '#A5B4FC',
-  indigo400: '#818CF8',
-  indigo500: '#6366F1',
-  indigo600: '#4F46E5',
-  indigo700: '#4338CA',
+  // Violeta — color principal (más cálido que el indigo anterior)
+  violet50:  '#F5F3FF',
+  violet100: '#EDE9FE',
+  violet200: '#DDD6FE',
+  violet300: '#C4B5FD',
+  violet400: '#A78BFA',
+  violet500: '#8B5CF6',
+  violet600: '#7C3AED',
+  violet700: '#6D28D9',
+  violet800: '#5B21B6',
 
+  // Rosa/Celebration — para logros, días perfectos, estados especiales
+  pink300: '#F9A8D4',
+  pink400: '#F472B6',
+  pink500: '#EC4899',
+
+  // Esmeralda — success, completions
   emerald400: '#34D399',
   emerald500: '#10B981',
   emerald600: '#059669',
 
+  // Amber — XP, rewards
   amber400: '#FBBF24',
   amber500: '#F59E0B',
 
+  // Rojo — error
   red400:    '#F87171',
   red500:    '#EF4444',
 
+  // Naranja — streak, energía
   orange400: '#FB923C',
   orange500: '#F97316',
 
-  gray50:   '#F9FAFB',
-  gray100:  '#F3F4F6',
-  gray200:  '#E5E7EB',
-  gray300:  '#D1D5DB',
-  gray400:  '#9CA3AF',
-  gray500:  '#6B7280',
-  gray600:  '#4B5563',
-  gray700:  '#374151',
-  gray800:  '#1F2937',
-  gray900:  '#111827',
+  // Grises cálidos (base warm, no el gris frío de Tailwind puro)
+  warmGray50:   '#FAFAF9',
+  warmGray100:  '#F5F5F4',
+  warmGray200:  '#E7E5E4',
+  warmGray300:  '#D6D3D1',
+  warmGray400:  '#A8A29E',
+  warmGray500:  '#78716C',
+  warmGray600:  '#57534E',
+  warmGray700:  '#44403C',
+  warmGray800:  '#292524',
+  warmGray900:  '#1C1917',
 
   white: '#FFFFFF',
   black: '#000000',
 
-  dark0:  '#0F0F0F',
-  dark1:  '#1A1A1A',
-  dark2:  '#242424',
-  dark3:  '#2E2E2E',
-  dark4:  '#3A3A3A',
+  // Oscuros — para dark mode (ligeramente más cálidos que neutros puros)
+  dark0:  '#110F0E',
+  dark1:  '#1C1917',
+  dark2:  '#27231F',
+  dark3:  '#322E29',
+  dark4:  '#3D3732',
 }
 
 // ─────────────────────────────────────────
@@ -53,62 +69,67 @@ const palette = {
 
 export const lightTheme = {
   colors: {
-    primary:       palette.indigo500,
-    primaryLight:  palette.indigo100,
-    primaryDark:   palette.indigo700,
-    secondary:     palette.emerald500,
+    primary:        palette.violet600,
+    primaryLight:   palette.violet100,
+    primaryDark:    palette.violet800,
+    secondary:      palette.emerald500,
     secondaryLight: palette.emerald400,
 
-    background:    palette.white,
-    surface:       palette.gray50,
+    // Warm cream background — más personal que el blanco puro
+    background:    palette.warmGray50,
+    surface:       palette.warmGray100,
     card:          palette.white,
-    border:        palette.gray200,
-    divider:       palette.gray100,
+    border:        palette.warmGray200,
+    divider:       palette.warmGray100,
 
-    text:          palette.gray900,
-    textSecondary: palette.gray500,
-    textDisabled:  palette.gray300,
+    text:          palette.warmGray900,
+    textSecondary: palette.warmGray500,
+    textDisabled:  palette.warmGray300,
     textInverse:   palette.white,
 
     success:       palette.emerald500,
     warning:       palette.amber500,
     error:         palette.red500,
-    info:          palette.indigo500,
+    info:          palette.violet600,
+
+    // Celebration — días perfectos, logros grandes
+    celebration:   palette.pink500,
+    celebrationLight: palette.pink300,
 
     xpBar:         palette.amber400,
     streak:        palette.orange500,
 
     heatmap: {
-      empty:  palette.gray200,
-      low:    palette.indigo100,
-      medium: palette.indigo400,
-      high:   palette.indigo600,
+      empty:  palette.warmGray200,
+      low:    palette.violet100,
+      medium: palette.violet400,
+      high:   palette.violet600,
     },
 
     scoreRing: {
       low:    palette.red400,
       mid:    palette.amber400,
       high:   palette.emerald400,
-      track:  palette.gray200,
+      track:  palette.warmGray200,
     },
 
     tabBar:        palette.white,
-    tabBarBorder:  palette.gray200,
-    tabActive:     palette.indigo500,
-    tabInactive:   palette.gray400,
+    tabBarBorder:  palette.warmGray200,
+    tabActive:     palette.violet600,
+    tabInactive:   palette.warmGray400,
 
-    overlay:       'rgba(0,0,0,0.4)',
-    backdrop:      'rgba(0,0,0,0.5)',
+    overlay:       'rgba(28,25,23,0.4)',
+    backdrop:      'rgba(28,25,23,0.5)',
   },
   isDark: false,
 }
 
 export const darkTheme = {
   colors: {
-    primary:       palette.indigo400,
-    primaryLight:  palette.indigo700,
-    primaryDark:   palette.indigo300,
-    secondary:     palette.emerald400,
+    primary:        palette.violet400,
+    primaryLight:   palette.violet800,
+    primaryDark:    palette.violet300,
+    secondary:      palette.emerald400,
     secondaryLight: palette.emerald400,
 
     background:    palette.dark0,
@@ -117,24 +138,27 @@ export const darkTheme = {
     border:        palette.dark3,
     divider:       palette.dark2,
 
-    text:          '#F5F5F5',
-    textSecondary: '#A0A0A0',
+    text:          '#F5F0EB',
+    textSecondary: '#A39E99',
     textDisabled:  palette.dark4,
     textInverse:   palette.dark0,
 
     success:       palette.emerald400,
     warning:       palette.amber400,
     error:         palette.red400,
-    info:          palette.indigo400,
+    info:          palette.violet400,
+
+    celebration:   palette.pink400,
+    celebrationLight: '#7A2040',
 
     xpBar:         palette.amber400,
     streak:        palette.orange400,
 
     heatmap: {
       empty:  palette.dark3,
-      low:    palette.indigo700,
-      medium: palette.indigo500,
-      high:   palette.indigo300,
+      low:    palette.violet800,
+      medium: palette.violet500,
+      high:   palette.violet300,
     },
 
     scoreRing: {
@@ -146,11 +170,11 @@ export const darkTheme = {
 
     tabBar:        palette.dark1,
     tabBarBorder:  palette.dark2,
-    tabActive:     palette.indigo400,
-    tabInactive:   palette.gray500,
+    tabActive:     palette.violet400,
+    tabInactive:   palette.warmGray500,
 
     overlay:       'rgba(0,0,0,0.6)',
-    backdrop:      'rgba(0,0,0,0.7)',
+    backdrop:      'rgba(0,0,0,0.75)',
   },
   isDark: true,
 }
@@ -220,23 +244,23 @@ export const typography = {
 
 export const shadows = {
   sm: {
-    shadowColor: '#000',
+    shadowColor: '#1C1917',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.06,
     shadowRadius: 2,
     elevation: 1,
   },
   md: {
-    shadowColor: '#000',
+    shadowColor: '#1C1917',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.09,
     shadowRadius: 8,
     elevation: 3,
   },
   lg: {
-    shadowColor: '#000',
+    shadowColor: '#1C1917',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.13,
     shadowRadius: 16,
     elevation: 6,
   },
@@ -247,8 +271,9 @@ export const shadows = {
 // ─────────────────────────────────────────
 
 export const HABIT_COLORS = [
-  '#6366F1', // Indigo
-  '#8B5CF6', // Violet
+  '#7C3AED', // Violet
+  '#6D28D9', // Violet dark
+  '#8B5CF6', // Violet light
   '#EC4899', // Pink
   '#EF4444', // Red
   '#F97316', // Orange
@@ -257,6 +282,7 @@ export const HABIT_COLORS = [
   '#10B981', // Emerald
   '#06B6D4', // Cyan
   '#3B82F6', // Blue
+  '#64748B', // Slate
 ]
 
 // ─────────────────────────────────────────
@@ -276,4 +302,31 @@ export const HABIT_ICONS = [
   { key: 'music',       label: 'Música' },
   { key: 'heart',       label: 'Salud' },
   { key: 'brain',       label: 'Aprender' },
+]
+
+// ─────────────────────────────────────────
+// AVATARES — emojis para el perfil del usuario
+// ─────────────────────────────────────────
+
+export const AVATAR_EMOJIS = [
+  '🦁', '🐯', '🐻', '🦊', '🐺',
+  '🦅', '🦋', '🌊', '🔥', '⚡',
+  '🌟', '💎', '🚀', '🌿', '🎯',
+  '🏔️', '🌙', '☀️', '🦄', '🐉',
+  '👾', '🎮', '🌺', '🍀',
+]
+
+// ─────────────────────────────────────────
+// ACCENT COLORS — para personalización del usuario
+// ─────────────────────────────────────────
+
+export const ACCENT_COLORS = [
+  { name: 'Violet',   light: '#7C3AED', dark: '#A78BFA' },
+  { name: 'Azul',     light: '#2563EB', dark: '#60A5FA' },
+  { name: 'Verde',    light: '#059669', dark: '#34D399' },
+  { name: 'Rosa',     light: '#DB2777', dark: '#F472B6' },
+  { name: 'Naranja',  light: '#EA580C', dark: '#FB923C' },
+  { name: 'Teal',     light: '#0891B2', dark: '#22D3EE' },
+  { name: 'Índigo',   light: '#4F46E5', dark: '#818CF8' },
+  { name: 'Rojo',     light: '#DC2626', dark: '#F87171' },
 ]

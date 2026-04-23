@@ -4,16 +4,22 @@ import {
   TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native'
 import { router } from 'expo-router'
+import * as WebBrowser from 'expo-web-browser'
+import * as Linking from 'expo-linking'
 import { supabase } from '@/services/supabase'
 import { Button } from '@/components/ui/Button'
 import { useTheme } from '@/hooks/useTheme'
 import { spacing, typography, radius } from '@/constants/theme'
+
+// Necesario para completar el auth session en iOS
+WebBrowser.maybeCompleteAuthSession()
 
 export default function LoginScreen() {
   const { colors } = useTheme()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [loadingGoogle, setLoadingGoogle] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleLogin = async () => {
@@ -33,7 +39,31 @@ export default function LoginScreen() {
   }
 
   const handleGoogleLogin = async () => {
-    await supabase.auth.signInWithOAuth({ provider: 'google' })
+    setLoadingGoogle(true)
+    setError(null)
+    try {
+      const redirectUrl = Linking.createURL('/')
+      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true,
+        },
+      })
+      if (oauthError) throw oauthError
+      if (!data?.url) throw new Error('No se obtuvo URL de autenticación')
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl)
+      if (result.type === 'success' && result.url) {
+        const { error: sessionError } = await supabase.auth.exchangeCodeForSession(result.url)
+        if (sessionError) throw sessionError
+        // El redirect lo maneja el listener en _layout.tsx
+      }
+    } catch (e: any) {
+      setError('No se pudo iniciar sesión con Google. Intentá de nuevo.')
+    } finally {
+      setLoadingGoogle(false)
+    }
   }
 
   const inputStyle = {
@@ -108,6 +138,7 @@ export default function LoginScreen() {
               size="lg"
               fullWidth
               onPress={handleGoogleLogin}
+              loading={loadingGoogle}
             />
           </View>
 

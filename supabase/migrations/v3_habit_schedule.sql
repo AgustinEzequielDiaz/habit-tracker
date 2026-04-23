@@ -18,9 +18,13 @@ UPDATE public.habits
 SET start_date = created_at::DATE
 WHERE start_date = CURRENT_DATE AND created_at::DATE < CURRENT_DATE;
 
--- 3. Recrear la vista habits_with_streaks para incluir los nuevos campos
---    (en PostgreSQL, SELECT h.* no se actualiza automáticamente al agregar columnas)
-CREATE OR REPLACE VIEW public.habits_with_streaks AS
+-- 3. Recrear la vista habits_with_streaks para incluir los nuevos campos.
+--    Usamos DROP + CREATE porque CREATE OR REPLACE no permite cambiar el orden
+--    de columnas (PostgreSQL error 42P16 cuando h.* expande nuevas columnas
+--    en posiciones que antes ocupaban current_streak / streak_start).
+DROP VIEW IF EXISTS public.habits_with_streaks;
+
+CREATE VIEW public.habits_with_streaks AS
 SELECT
   h.*,
   COALESCE(hs.length_days, 0)  AS current_streak,

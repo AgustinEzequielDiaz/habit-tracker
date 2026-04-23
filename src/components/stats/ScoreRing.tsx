@@ -40,7 +40,7 @@ export function ScoreRing({
 
   useEffect(() => {
     progress.value = withTiming(score / 100, {
-      duration: 1200,
+      duration: 350,
       easing: Easing.out(Easing.cubic),
     })
   }, [score])

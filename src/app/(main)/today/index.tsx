@@ -1,20 +1,60 @@
-import React, { useEffect, useCallback } from 'react'
+import React, { useEffect, useCallback, useState, useMemo } from 'react'
 import {
   View, Text, StyleSheet, FlatList,
   SafeAreaView, RefreshControl, ActivityIndicator,
 } from 'react-native'
+import Animated, {
+  useSharedValue, useAnimatedStyle, withTiming, Easing,
+} from 'react-native-reanimated'
 import { useHabitsStore } from '@/stores/habits.store'
 import { useCompletionsStore } from '@/stores/completions.store'
 import { useUserStore } from '@/stores/user.store'
 import { useSyncStore } from '@/stores/sync.store'
 import { HabitCard } from '@/components/habits/HabitCard'
+import { HabitDetailSheet } from '@/components/habits/HabitDetailSheet'
+import { ValueInputModal } from '@/components/habits/ValueInputModal'
 import { ScoreRing } from '@/components/stats/ScoreRing'
 import { XPProgressBar } from '@/components/gamification/XPProgressBar'
 import { Card } from '@/components/ui/Card'
 import { MotivationCard } from '@/components/ui/MotivationCard'
+import { MoodPicker } from '@/components/ui/MoodPicker'
+import { JournalCard } from '@/components/ui/JournalCard'
+import { JournalSheet } from '@/components/ui/JournalSheet'
 import { useTheme } from '@/hooks/useTheme'
 import { spacing, typography, radius } from '@/constants/theme'
 import { formatDisplayDate, todayString } from '@/utils/date'
+import { HabitWithCompletion } from '@/types'
+
+// ── Barra de progreso del día animada ──────────────────────────────
+function DayProgressBar({ rate, allDone }: { rate: number; allDone: boolean }) {
+  const { colors } = useTheme()
+  const progress = useSharedValue(0)
+
+  useEffect(() => {
+    progress.value = withTiming(rate, { duration: 400, easing: Easing.out(Easing.cubic) })
+  }, [rate])
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    width: `${progress.value * 100}%` as any,
+  }))
+
+  return (
+    <View style={[progressStyles.track, { backgroundColor: colors.surface }]}>
+      <Animated.View
+        style={[
+          progressStyles.fill,
+          { backgroundColor: allDone ? colors.success : colors.primary },
+          animatedStyle,
+        ]}
+      />
+    </View>
+  )
+}
+
+const progressStyles = StyleSheet.create({
+  track: { height: 6, borderRadius: radius.full, overflow: 'hidden' },
+  fill:  { height: '100%', borderRadius: radius.full },
+})
 
 export default function TodayScreen() {
   const { colors } = useTheme()
@@ -24,10 +64,14 @@ export default function TodayScreen() {
     loadTodayCompletions, loadRecentCompletions,
     toggleCompletion, habitsWithCompletions,
     completedTodayCount, todayCompletionRate,
+    recentCompletions, todayCompletions,
   } = useCompletionsStore()
   const { isOnline } = useSyncStore()
 
-  const [refreshing, setRefreshing] = React.useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [selectedHabit, setSelectedHabit] = useState<HabitWithCompletion | null>(null)
+  const [valueInputHabit, setValueInputHabit] = useState<HabitWithCompletion | null>(null)
+  const [journalOpen, setJournalOpen] = useState(false)
 
   const loadData = useCallback(async () => {
     await Promise.all([loadHabits(), loadTodayCompletions(), loadRecentCompletions()])
@@ -45,10 +89,45 @@ export default function TodayScreen() {
     toggleCompletion(habitId, isOnline, value)
   }
 
+  const handleHabitPress = (habit: HabitWithCompletion) => {
+    setSelectedHabit(habit)
+  }
+
+  const handleRequestValue = (habit: HabitWithCompletion) => {
+    setValueInputHabit(habit)
+  }
+
+  const handleValueConfirm = (habitId: string, value: number) => {
+    toggleCompletion(habitId, isOnline, value)
+    setValueInputHabit(null)
+  }
+
+  const handleValueSkip = (habitId: string) => {
+    toggleCompletion(habitId, isOnline)
+    setValueInputHabit(null)
+  }
+
   const habitsData = habitsWithCompletions()
   const completedCount = completedTodayCount()
   const completionRate = todayCompletionRate()
   const allDone = habits.length > 0 && completedCount === habits.length
+
+  // Detectar hábitos en riesgo de abandono (0 completions en los últimos 7 días)
+  const atRiskHabitIds = useMemo(() => {
+    const last7Set = new Set<string>()
+    const today = new Date()
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today)
+      d.setDate(d.getDate() - i)
+      last7Set.add(d.toISOString().split('T')[0])
+    }
+    const completedLast7 = new Set(
+      recentCompletions
+        .filter((c) => last7Set.has(c.completed_date))
+        .map((c) => c.habit_id)
+    )
+    return new Set(habits.filter((h) => !completedLast7.has(h.id)).map((h) => h.id))
+  }, [recentCompletions, habits])
 
   const greeting = () => {
     const hour = new Date().getHours()
@@ -99,18 +178,8 @@ export default function TodayScreen() {
               </Text>
             </View>
 
-            {/* Barra de progreso del día */}
-            <View style={[styles.dayProgressTrack, { backgroundColor: colors.surface }]}>
-              <View
-                style={[
-                  styles.dayProgressFill,
-                  {
-                    backgroundColor: allDone ? colors.success : colors.primary,
-                    width: `${completionRate * 100}%`,
-                  },
-                ]}
-              />
-            </View>
+            {/* Barra de progreso del día animada */}
+            <DayProgressBar rate={completionRate} allDone={allDone} />
 
             {/* XP */}
             <XPProgressBar
@@ -141,6 +210,12 @@ export default function TodayScreen() {
         globalScore={user?.global_score ?? 0}
         displayName={user?.display_name}
       />
+
+      {/* Mood del día */}
+      <MoodPicker />
+
+      {/* Journal diario */}
+      <JournalCard onPress={() => setJournalOpen(true)} />
 
       {/* Título de la lista */}
       <Text style={[styles.listTitle, { color: colors.textSecondary }]}>
@@ -180,6 +255,9 @@ export default function TodayScreen() {
           <HabitCard
             habit={item}
             onToggle={handleToggle}
+            onPress={handleHabitPress}
+            onRequestValue={handleRequestValue}
+            atRisk={atRiskHabitIds.has(item.id)}
           />
         )}
         ListHeaderComponent={renderHeader}
@@ -193,6 +271,28 @@ export default function TodayScreen() {
             tintColor={colors.primary}
           />
         }
+      />
+
+      {/* Detalle del hábito — bottom sheet al hacer tap */}
+      <HabitDetailSheet
+        habit={selectedHabit}
+        recentCompletions={[...recentCompletions, ...todayCompletions]}
+        onClose={() => setSelectedHabit(null)}
+        onToggle={(habitId) => toggleCompletion(habitId, isOnline)}
+      />
+
+      {/* Input de valor para hábitos medibles/tiempo */}
+      <ValueInputModal
+        habit={valueInputHabit}
+        onConfirm={handleValueConfirm}
+        onSkip={handleValueSkip}
+        onClose={() => setValueInputHabit(null)}
+      />
+
+      {/* Journal sheet */}
+      <JournalSheet
+        visible={journalOpen}
+        onClose={() => setJournalOpen(false)}
       />
     </SafeAreaView>
   )
@@ -260,15 +360,6 @@ const styles = StyleSheet.create({
   progressSub: {
     fontSize: typography.sizes.md,
     fontWeight: '400',
-  },
-  dayProgressTrack: {
-    height: 6,
-    borderRadius: radius.full,
-    overflow: 'hidden',
-  },
-  dayProgressFill: {
-    height: '100%',
-    borderRadius: radius.full,
   },
   perfectDayBadge: {
     padding: spacing.sm,
