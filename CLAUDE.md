@@ -4,9 +4,43 @@
 
 ---
 
-## ESTADO ACTUAL: V4.1 — Journal Redesign + FAB + Visual Share Card
+## ESTADO ACTUAL: V5.0 — Frecuencias no-diarias + ShareCard Carousel
 
 Leer `CONTEXT_V1.md` para el contexto completo de arquitectura, decisiones y flujos.
+
+### Features implementados en V5.0 (2026-04-23)
+
+#### 1. Frecuencias no-diarias (weekly + custom weekdays)
+- **`src/types/index.ts`** — `FrequencyType = 'daily' | 'weekly' | 'custom'`. `Habit` y `CreateHabitForm` tienen `frequency_type?`, `frequency_days?`, `frequency_weekdays?`. `HabitWithCompletion` tiene `weeklyProgress?` y `weeklyTarget?`.
+- **`src/utils/frequency.ts`** — Módulo nuevo:
+  - `getFrequencyLabel(habit)` → `null` (daily), `"3×/sem"` (weekly), `"L, X, V"` / `"4d/sem"` (custom)
+  - `isHabitDueToday(habit)` → false para hábitos custom en días que no corresponden
+  - `getWeekStart()` → lunes de la semana actual (YYYY-MM-DD)
+  - `getWeeklyCompletionCount(habitId, completions)` → completions desde lunes hasta hoy
+  - `isWeeklyHabitSatisfied(habit, completions)` → count >= target
+- **`src/stores/habits.store.ts`** — `filterTodayHabits` llama `isHabitDueToday(h)` para filtrar hábitos custom que no son hoy
+- **`src/stores/completions.store.ts`** — `habitsWithCompletions()` maneja hábitos weekly: `weekCount >= target` determina `isCompleted`. Devuelve `weeklyProgress` + `weeklyTarget`. `completedTodayCount()` y `todayCompletionRate()` usan `habitsWithCompletions()`.
+- **`src/services/habits.service.ts`** — `create()` persiste `frequency_type`, `frequency_days`, `frequency_weekdays` con fallback graceful si la migración v5 no fue ejecutada.
+- **`src/components/habits/HabitForm.tsx`** — Sección colapsable "🔁 Frecuencia":
+  - 3 chips de tipo: 📅 Diaria / 📆 X/semana / 🗓 Días fijos
+  - Weekly: stepper − / + para cantidad de días (1-6 veces por semana)
+  - Custom: chips de días L M X J V S D (seleccionables, orden Lun→Dom)
+  - `frequencySummary` en el botón colapsable (ej: "3×/sem" o "L, M, X")
+- **`src/components/habits/HabitCard.tsx`** — Badge de frecuencia (`freqLabel` como pill de color) + progreso semanal ("2/3 esta sem." / "✓ esta sem.") para hábitos weekly.
+
+#### 2. Carrusel de 5 temas para ShareCard
+- **`src/components/profile/ShareCard.tsx`** — Refactorizado con sistema de temas:
+  - `ShareCardThemeId = 'violet' | 'emerald' | 'sunset' | 'ocean' | 'rose'`
+  - `SHARE_THEMES: ShareCardTheme[]` — 5 temas con gradientes, glow, accentos, colores de heatmap individuales
+  - `ShareCard` acepta `theme?: ShareCardTheme` (default: Violet Dark)
+  - `ScoreRingSvg` y `HeatmapRow` usan colores del tema. IDs de SVG únicos por tema para evitar conflictos.
+- **`src/components/profile/SharePreviewModal.tsx`** — Reescrito con carrusel:
+  - `ScrollView horizontal pagingEnabled` con refs por tema
+  - `cardRefs.current[]` — array de ViewShot refs, uno por tema
+  - Dots + nombre del tema debajo del carrusel (píldora activa, puntos inactivos)
+  - Al tocar un dot: `scrollTo()` para navegar
+  - Botón "Compartir" adapta color de `activeTheme.accentTo`
+  - Share captura el ViewShot del índice activo
 
 ### Features implementados en V4.1 (2026-04-23)
 
@@ -250,6 +284,17 @@ eas build --profile production --platform all
 
 ---
 
+## CHECKLIST PARA PRIMERA PRUEBA (V5.0)
+
+- [ ] **Migración v5** (si no fue ejecutada) → `supabase/migrations/v5_mood_frequency.sql`
+- [ ] **Flujos a testear:**
+  1. Crear hábito → sección "🔁 Frecuencia" → elegir "X/semana" con 3 días → verificar badge "3×/sem" en HabitCard + progreso "0/3 esta sem."
+  2. Completar ese hábito → verificar que el progreso sube ("1/3 esta sem.", "2/3 esta sem.")
+  3. Al llegar a 3/3 → hábito se marca como completado (✓ esta sem.)
+  4. Crear hábito con "Días fijos" → elegir L, X, V → verificar que NO aparece en Martes/Jueves/Sábado/Domingo
+  5. Perfil → botón 🔗 → modal con carrusel de 5 temas → deslizar/tocar dots → verificar colores distintos
+  6. Seleccionar tema "Sunset" → "Compartir imagen" → verificar que captura en naranja/rojo
+
 ## CHECKLIST PARA PRIMERA PRUEBA (V4.1)
 
 - [ ] **npm install** — instalar `react-native-view-shot` y `expo-sharing`
@@ -304,15 +349,14 @@ eas build --profile production --platform all
 
 ---
 
-## PRÓXIMOS PASOS (V5+)
+## PRÓXIMOS PASOS (V6+)
 
-1. **Frecuencias no diarias** (DB migrada en V5, falta UI en HabitForm + lógica client-side en habits.store)
-2. **Micro-hábitos** (sub-hábitos con lógica de anclaje — requiere schema changes)
-3. **Persistir mood + journal en Supabase** (actualmente solo AsyncStorage — tabla mood_entries ya existe)
-4. **Mood en Stats** (gráfico de mood vs tasa de completions en pantalla Stats)
-5. **IA / sugerencias personalizadas** (OpenAI o Edge Function con contexto del usuario)
-6. **Grupos y buddy system** (social básico — requiere schema complejo)
-7. **Versión web** (React + Supabase, mismo backend)
+1. **Micro-hábitos** (sub-hábitos con lógica de anclaje — requiere schema changes)
+2. **Persistir mood + journal en Supabase** (actualmente solo AsyncStorage — tabla mood_entries ya existe)
+3. **Mood en Stats** (gráfico de mood vs tasa de completions en pantalla Stats)
+4. **IA / sugerencias personalizadas** (OpenAI o Edge Function con contexto del usuario)
+5. **Grupos y buddy system** (social básico — requiere schema complejo)
+6. **Versión web** (React + Supabase, mismo backend)
 
 ---
 
@@ -325,4 +369,4 @@ eas build --profile production --platform all
 | V3 | ✅ Completo | Hábitos medibles, mood tracking, riesgo abandono, correlaciones, Google OAuth |
 | V4 | ✅ Completo | Agenda semanal, journal diario, smart notifications, compartir progreso |
 | V4.1 | ✅ Completo | Journal redesign (JournalCard+Sheet), FAB configurable, tarjeta visual redes sociales |
-| V5 | 📋 Planificado | Frecuencias no-diarias, micro-hábitos, mood en Stats, persistencia Supabase, IA |
+| V5 | ✅ Completo | Frecuencias no-diarias (weekly + custom), carrusel de 5 temas ShareCard |

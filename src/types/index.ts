@@ -9,6 +9,7 @@
 export type HabitCategory = 'fitness' | 'productividad' | 'bienestar' | 'rutinas'
 export type HabitType = 'binary' | 'measurable' | 'timed'
 export type HabitDifficulty = 'easy' | 'normal' | 'hard'
+export type FrequencyType = 'daily' | 'weekly' | 'custom'
 export type CompletionSource = 'manual' | 'offline_sync'
 
 // ─────────────────────────────────────────
@@ -56,6 +57,10 @@ export interface Habit {
   // Scheduling (V3) — opcionales para compatibilidad con instancias sin migración
   start_date?: string   // YYYY-MM-DD, default hoy
   end_date?: string | null  // YYYY-MM-DD, null = sin fecha límite
+  // Frecuencia (V5) — opcionales para retrocompatibilidad
+  frequency_type?: FrequencyType   // default 'daily'
+  frequency_days?: number          // weekly: cuántas veces por semana (1-7)
+  frequency_weekdays?: number[]    // custom: días de la semana (0=Dom, 1=Lun...6=Sab)
   created_at: string
   updated_at: string
   // Joined from habits_with_streaks view
@@ -122,6 +127,9 @@ export interface UserAchievement {
 export interface HabitWithCompletion extends Habit {
   completion: HabitCompletion | null
   isCompleted: boolean
+  // Weekly frequency extras
+  weeklyProgress?: number   // completions this week (for weekly habits)
+  weeklyTarget?: number     // target per week (for weekly habits)
 }
 
 export interface TodayData {
@@ -169,6 +177,10 @@ export interface CreateHabitForm {
   // Scheduling (V3)
   start_date?: string   // YYYY-MM-DD, undefined = hoy
   end_date?: string | null  // YYYY-MM-DD, undefined/null = sin fecha límite
+  // Frecuencia (V5)
+  frequency_type?: FrequencyType
+  frequency_days?: number
+  frequency_weekdays?: number[]
 }
 
 export interface UpdateHabitForm extends Partial<CreateHabitForm> {

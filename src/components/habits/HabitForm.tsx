@@ -9,7 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native'
-import { CreateHabitForm, HabitCategory, HabitDifficulty, HabitType } from '@/types'
+import { CreateHabitForm, FrequencyType, HabitCategory, HabitDifficulty, HabitType } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { HabitSchedulePicker } from '@/components/ui/HabitSchedulePicker'
 import { useTheme } from '@/hooks/useTheme'
@@ -71,6 +71,14 @@ export function HabitForm({ initial, onSubmit, onCancel, submitLabel = 'Crear h�
   const [startDate, setStartDate] = useState(initial?.start_date ?? todayString())
   const [endDate, setEndDate] = useState<string | null>(initial?.end_date ?? null)
 
+  // Frecuencia
+  const [showFrequency, setShowFrequency] = useState(
+    !!(initial?.frequency_type && initial.frequency_type !== 'daily')
+  )
+  const [frequencyType, setFrequencyType] = useState<FrequencyType>(initial?.frequency_type ?? 'daily')
+  const [frequencyDays, setFrequencyDays] = useState(initial?.frequency_days ?? 3)
+  const [frequencyWeekdays, setFrequencyWeekdays] = useState<number[]>(initial?.frequency_weekdays ?? [])
+
   const handleSubmit = async () => {
     if (!name.trim()) {
       setError('El nombre del hábito es obligatorio')
@@ -93,6 +101,9 @@ export function HabitForm({ initial, onSubmit, onCancel, submitLabel = 'Crear h�
         icon,
         start_date: startDate,
         end_date: endDate,
+        frequency_type: frequencyType,
+        frequency_days: frequencyType === 'weekly' ? frequencyDays : undefined,
+        frequency_weekdays: frequencyType === 'custom' ? frequencyWeekdays : undefined,
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al guardar')
@@ -109,6 +120,27 @@ export function HabitForm({ initial, onSubmit, onCancel, submitLabel = 'Crear h�
   }
 
   // Resumen del schedule para mostrar en el botón colapsable
+  const WEEKDAY_LABELS = ['D', 'L', 'M', 'X', 'J', 'V', 'S']
+  const WEEKDAY_FULL   = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+
+  const toggleWeekday = (day: number) => {
+    setFrequencyWeekdays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    )
+  }
+
+  const frequencySummary = (() => {
+    if (frequencyType === 'daily') return 'Todos los días'
+    if (frequencyType === 'weekly') return `${frequencyDays} veces por semana`
+    if (frequencyType === 'custom') {
+      if (frequencyWeekdays.length === 0) return 'Elegir días'
+      // Sort Mon→Sun
+      const sorted = [...frequencyWeekdays].sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b))
+      return sorted.map((d) => WEEKDAY_FULL[d]).join(', ')
+    }
+    return ''
+  })()
+
   const scheduleSummary = (() => {
     const today = todayString()
     const parts: string[] = []
@@ -316,6 +348,113 @@ export function HabitForm({ initial, onSubmit, onCancel, submitLabel = 'Crear h�
           </View>
         </View>
 
+        {/* ── Frecuencia (colapsable) ── */}
+        <View style={[styles.scheduleCard, { borderColor: showFrequency && frequencyType !== 'daily' ? colors.primary : colors.border, backgroundColor: showFrequency && frequencyType !== 'daily' ? `${colors.primary}06` : colors.surface }]}>
+          <TouchableOpacity
+            onPress={() => setShowFrequency(!showFrequency)}
+            style={styles.scheduleToggleRow}
+            activeOpacity={0.7}
+          >
+            <View style={styles.scheduleToggleLeft}>
+              <Text style={styles.scheduleIcon}>🔁</Text>
+              <View>
+                <Text style={[styles.scheduleToggleTitle, { color: colors.text }]}>Frecuencia</Text>
+                <Text style={[styles.scheduleToggleSub, { color: colors.textSecondary }]}>{frequencySummary}</Text>
+              </View>
+            </View>
+            <Text style={[styles.scheduleChevron, { color: colors.textSecondary }]}>
+              {showFrequency ? '▲' : '▼'}
+            </Text>
+          </TouchableOpacity>
+
+          {showFrequency && (
+            <View style={[styles.schedulePicker, { borderTopColor: colors.border, gap: 16 }]}>
+              {/* Tipo de frecuencia */}
+              <View style={styles.freqTypeRow}>
+                {([
+                  { key: 'daily',  label: 'Diaria',    emoji: '📅' },
+                  { key: 'weekly', label: 'X/semana',  emoji: '📆' },
+                  { key: 'custom', label: 'Días fijos', emoji: '🗓' },
+                ] as { key: FrequencyType; label: string; emoji: string }[]).map((ft) => (
+                  <TouchableOpacity
+                    key={ft.key}
+                    onPress={() => setFrequencyType(ft.key)}
+                    style={[
+                      styles.freqTypeChip,
+                      {
+                        backgroundColor: frequencyType === ft.key ? `${color}18` : colors.surface,
+                        borderColor: frequencyType === ft.key ? color : colors.border,
+                        borderWidth: frequencyType === ft.key ? 2 : 1,
+                      },
+                    ]}
+                  >
+                    <Text style={{ fontSize: 16 }}>{ft.emoji}</Text>
+                    <Text style={[styles.freqTypeLabel, { color: frequencyType === ft.key ? color : colors.text }]}>
+                      {ft.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Weekly stepper */}
+              {frequencyType === 'weekly' && (
+                <View style={styles.stepperRow}>
+                  <Text style={[styles.stepperLabel, { color: colors.textSecondary }]}>
+                    Veces por semana
+                  </Text>
+                  <View style={styles.stepper}>
+                    <TouchableOpacity
+                      onPress={() => setFrequencyDays((n) => Math.max(1, n - 1))}
+                      style={[styles.stepperBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    >
+                      <Text style={[styles.stepperBtnText, { color: colors.text }]}>−</Text>
+                    </TouchableOpacity>
+                    <Text style={[styles.stepperValue, { color: colors.text }]}>{frequencyDays}</Text>
+                    <TouchableOpacity
+                      onPress={() => setFrequencyDays((n) => Math.min(6, n + 1))}
+                      style={[styles.stepperBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    >
+                      <Text style={[styles.stepperBtnText, { color: colors.text }]}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {/* Custom weekday picker */}
+              {frequencyType === 'custom' && (
+                <View style={styles.weekdaySection}>
+                  <Text style={[styles.stepperLabel, { color: colors.textSecondary }]}>
+                    Días de la semana
+                  </Text>
+                  <View style={styles.weekdayRow}>
+                    {/* Order: Mon(1), Tue(2), Wed(3), Thu(4), Fri(5), Sat(6), Sun(0) */}
+                    {[1, 2, 3, 4, 5, 6, 0].map((day) => {
+                      const selected = frequencyWeekdays.includes(day)
+                      return (
+                        <TouchableOpacity
+                          key={day}
+                          onPress={() => toggleWeekday(day)}
+                          style={[
+                            styles.weekdayChip,
+                            {
+                              backgroundColor: selected ? color : colors.surface,
+                              borderColor: selected ? color : colors.border,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.weekdayChipText, { color: selected ? '#fff' : colors.textSecondary }]}>
+                            {WEEKDAY_LABELS[day]}
+                          </Text>
+                        </TouchableOpacity>
+                      )
+                    })}
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+
         {/* ── Programar (colapsable) ── */}
         <View style={[styles.scheduleCard, { borderColor: showSchedule ? colors.primary : colors.border, backgroundColor: showSchedule ? `${colors.primary}06` : colors.surface }]}>
           <TouchableOpacity
@@ -483,6 +622,74 @@ const styles = StyleSheet.create({
   schedulePicker: {
     borderTopWidth: 1,
     padding: spacing.md,
+  },
+  // ── Frecuencia ──
+  freqTypeRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  freqTypeChip: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    gap: 4,
+  },
+  freqTypeLabel: {
+    fontSize: typography.sizes.xs,
+    fontWeight: '600',
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  stepperLabel: {
+    fontSize: typography.sizes.sm,
+    fontWeight: '500',
+  },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  stepperBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperBtnText: {
+    fontSize: 20,
+    fontWeight: '300',
+    lineHeight: 24,
+  },
+  stepperValue: {
+    fontSize: typography.sizes.xl,
+    fontWeight: '800',
+    minWidth: 28,
+    textAlign: 'center',
+  },
+  weekdaySection: {
+    gap: spacing.sm,
+  },
+  weekdayRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  weekdayChip: {
+    flex: 1,
+    height: 40,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  weekdayChipText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: '700',
   },
   // ── Tipo de hábito ──
   typeRow: {

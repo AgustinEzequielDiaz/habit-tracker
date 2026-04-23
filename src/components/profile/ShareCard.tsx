@@ -8,24 +8,159 @@ import Svg, {
 export const CARD_WIDTH = 360
 export const CARD_HEIGHT = 540
 
-// ── Micro score ring ─────────────────────────────────────────────────
-function ScoreRingSvg({ score }: { score: number }) {
+// ── Theme definitions ────────────────────────────────────────────────
+
+export type ShareCardThemeId = 'violet' | 'emerald' | 'sunset' | 'ocean' | 'rose'
+
+export interface ShareCardTheme {
+  id: ShareCardThemeId
+  name: string
+  emoji: string
+  // Background gradient stops
+  bgTop: string
+  bgMid: string
+  bgBottom: string
+  // Glow orb
+  glowColor: string
+  // Accent / ring
+  accentFrom: string
+  accentTo: string
+  // Heatmap tile colors: empty, low, mid, full
+  heatEmpty: string
+  heatLow: string
+  heatMid: string
+  heatFull: string
+  // Badge background & border
+  badgeBg: string
+  badgeBorder: string
+  badgeText: string
+  // Footer tag
+  tagColor: string
+  // Level badge bg
+  levelBg: string
+}
+
+export const SHARE_THEMES: ShareCardTheme[] = [
+  {
+    id: 'violet',
+    name: 'Violet',
+    emoji: '💜',
+    bgTop: '#1A0533',
+    bgMid: '#2D1054',
+    bgBottom: '#0F0720',
+    glowColor: '#7C3AED',
+    accentFrom: '#A78BFA',
+    accentTo: '#7C3AED',
+    heatEmpty: 'rgba(255,255,255,0.12)',
+    heatLow: '#DDD6FE',
+    heatMid: '#A78BFA',
+    heatFull: '#7C3AED',
+    badgeBg: 'rgba(124,58,237,0.40)',
+    badgeBorder: 'rgba(167,139,250,0.4)',
+    badgeText: '#DDD6FE',
+    tagColor: '#A78BFA',
+    levelBg: 'rgba(124,58,237,0.50)',
+  },
+  {
+    id: 'emerald',
+    name: 'Esmeralda',
+    emoji: '💚',
+    bgTop: '#022C22',
+    bgMid: '#064E3B',
+    bgBottom: '#011714',
+    glowColor: '#10B981',
+    accentFrom: '#6EE7B7',
+    accentTo: '#059669',
+    heatEmpty: 'rgba(255,255,255,0.10)',
+    heatLow: '#A7F3D0',
+    heatMid: '#34D399',
+    heatFull: '#059669',
+    badgeBg: 'rgba(16,185,129,0.30)',
+    badgeBorder: 'rgba(52,211,153,0.4)',
+    badgeText: '#A7F3D0',
+    tagColor: '#34D399',
+    levelBg: 'rgba(16,185,129,0.50)',
+  },
+  {
+    id: 'sunset',
+    name: 'Sunset',
+    emoji: '🌅',
+    bgTop: '#2C0A00',
+    bgMid: '#7C2D12',
+    bgBottom: '#1C0400',
+    glowColor: '#F97316',
+    accentFrom: '#FCD34D',
+    accentTo: '#EF4444',
+    heatEmpty: 'rgba(255,255,255,0.10)',
+    heatLow: '#FED7AA',
+    heatMid: '#FB923C',
+    heatFull: '#EF4444',
+    badgeBg: 'rgba(249,115,22,0.30)',
+    badgeBorder: 'rgba(252,211,77,0.35)',
+    badgeText: '#FED7AA',
+    tagColor: '#FB923C',
+    levelBg: 'rgba(249,115,22,0.45)',
+  },
+  {
+    id: 'ocean',
+    name: 'Océano',
+    emoji: '🌊',
+    bgTop: '#0C1445',
+    bgMid: '#0E3A6E',
+    bgBottom: '#060A26',
+    glowColor: '#0EA5E9',
+    accentFrom: '#7DD3FC',
+    accentTo: '#0284C7',
+    heatEmpty: 'rgba(255,255,255,0.10)',
+    heatLow: '#BAE6FD',
+    heatMid: '#38BDF8',
+    heatFull: '#0284C7',
+    badgeBg: 'rgba(14,165,233,0.30)',
+    badgeBorder: 'rgba(125,211,252,0.4)',
+    badgeText: '#BAE6FD',
+    tagColor: '#38BDF8',
+    levelBg: 'rgba(14,165,233,0.45)',
+  },
+  {
+    id: 'rose',
+    name: 'Rosa',
+    emoji: '🌸',
+    bgTop: '#2D001C',
+    bgMid: '#600030',
+    bgBottom: '#160010',
+    glowColor: '#EC4899',
+    accentFrom: '#F9A8D4',
+    accentTo: '#DB2777',
+    heatEmpty: 'rgba(255,255,255,0.10)',
+    heatLow: '#FBCFE8',
+    heatMid: '#F472B6',
+    heatFull: '#DB2777',
+    badgeBg: 'rgba(236,72,153,0.30)',
+    badgeBorder: 'rgba(249,168,212,0.4)',
+    badgeText: '#FBCFE8',
+    tagColor: '#F472B6',
+    levelBg: 'rgba(236,72,153,0.45)',
+  },
+]
+
+// ── Score ring ────────────────────────────────────────────────────────
+function ScoreRingSvg({ score, theme }: { score: number; theme: ShareCardTheme }) {
   const size = 90
   const strokeWidth = 8
   const r = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * r
   const progress = Math.min(Math.max(score / 100, 0), 1)
   const dash = circumference * progress
+  const gradId = `scoreGrad_${theme.id}`
 
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <Defs>
-        <LinearGradient id="scoreGrad" x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0" stopColor="#A78BFA" />
-          <Stop offset="1" stopColor="#7C3AED" />
+        <LinearGradient id={gradId} x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor={theme.accentFrom} />
+          <Stop offset="1" stopColor={theme.accentTo} />
         </LinearGradient>
       </Defs>
-      {/* Track */}
       <Circle
         cx={size / 2}
         cy={size / 2}
@@ -34,19 +169,17 @@ function ScoreRingSvg({ score }: { score: number }) {
         strokeWidth={strokeWidth}
         fill="none"
       />
-      {/* Progress arc */}
       <Circle
         cx={size / 2}
         cy={size / 2}
         r={r}
-        stroke="url(#scoreGrad)"
+        stroke={`url(#${gradId})`}
         strokeWidth={strokeWidth}
         fill="none"
         strokeDasharray={`${dash} ${circumference}`}
         strokeLinecap="round"
         transform={`rotate(-90, ${size / 2}, ${size / 2})`}
       />
-      {/* Score label */}
       <SvgText
         x={size / 2}
         y={size / 2 - 4}
@@ -72,16 +205,22 @@ function ScoreRingSvg({ score }: { score: number }) {
 }
 
 // ── Weekly heatmap dots ──────────────────────────────────────────────
-function HeatmapRow({ days }: { days: { date: string; rate: number }[] }) {
+function HeatmapRow({
+  days,
+  theme,
+}: {
+  days: { date: string; rate: number }[]
+  theme: ShareCardTheme
+}) {
   const DOT_SIZE = 32
   const DOT_GAP = 8
   const totalW = days.length * DOT_SIZE + (days.length - 1) * DOT_GAP
 
   const getColor = (rate: number) => {
-    if (rate === 0) return 'rgba(255,255,255,0.12)'
-    if (rate < 0.4) return '#DDD6FE'
-    if (rate < 0.75) return '#A78BFA'
-    return '#7C3AED'
+    if (rate === 0) return theme.heatEmpty
+    if (rate < 0.4) return theme.heatLow
+    if (rate < 0.75) return theme.heatMid
+    return theme.heatFull
   }
 
   const dayLabels = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
@@ -90,17 +229,9 @@ function HeatmapRow({ days }: { days: { date: string; rate: number }[] }) {
     <Svg width={totalW} height={DOT_SIZE + 20} viewBox={`0 0 ${totalW} ${DOT_SIZE + 20}`}>
       {days.map((d, i) => {
         const x = i * (DOT_SIZE + DOT_GAP)
-        const color = getColor(d.rate)
         return (
           <G key={d.date}>
-            <Rect
-              x={x}
-              y={0}
-              width={DOT_SIZE}
-              height={DOT_SIZE}
-              rx={8}
-              fill={color}
-            />
+            <Rect x={x} y={0} width={DOT_SIZE} height={DOT_SIZE} rx={8} fill={getColor(d.rate)} />
             <SvgText
               x={x + DOT_SIZE / 2}
               y={DOT_SIZE + 14}
@@ -118,32 +249,26 @@ function HeatmapRow({ days }: { days: { date: string; rate: number }[] }) {
   )
 }
 
-// ── Background gradient card ─────────────────────────────────────────
-function CardBackground() {
+// ── Themed background ────────────────────────────────────────────────
+function CardBackground({ theme }: { theme: ShareCardTheme }) {
+  const bgId = `bgGrad_${theme.id}`
+  const glowId = `glowGrad_${theme.id}`
   return (
-    <Svg
-      width={CARD_WIDTH}
-      height={CARD_HEIGHT}
-      style={StyleSheet.absoluteFillObject}
-    >
+    <Svg width={CARD_WIDTH} height={CARD_HEIGHT} style={StyleSheet.absoluteFillObject}>
       <Defs>
-        <LinearGradient id="bgGrad" x1="0" y1="0" x2="0.4" y2="1">
-          <Stop offset="0" stopColor="#1A0533" />
-          <Stop offset="0.5" stopColor="#2D1054" />
-          <Stop offset="1" stopColor="#0F0720" />
+        <LinearGradient id={bgId} x1="0" y1="0" x2="0.4" y2="1">
+          <Stop offset="0" stopColor={theme.bgTop} />
+          <Stop offset="0.5" stopColor={theme.bgMid} />
+          <Stop offset="1" stopColor={theme.bgBottom} />
         </LinearGradient>
-        <LinearGradient id="glowGrad" x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0" stopColor="#7C3AED" stopOpacity="0.35" />
-          <Stop offset="1" stopColor="#7C3AED" stopOpacity="0" />
+        <LinearGradient id={glowId} x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor={theme.glowColor} stopOpacity="0.40" />
+          <Stop offset="1" stopColor={theme.glowColor} stopOpacity="0" />
         </LinearGradient>
       </Defs>
-      {/* Base gradient */}
-      <Rect width={CARD_WIDTH} height={CARD_HEIGHT} fill="url(#bgGrad)" rx={24} />
-      {/* Glow orb top-right */}
-      <Circle cx={CARD_WIDTH * 0.82} cy={CARD_HEIGHT * 0.18} r={120} fill="url(#glowGrad)" />
-      {/* Glow orb bottom-left */}
-      <Circle cx={CARD_WIDTH * 0.15} cy={CARD_HEIGHT * 0.82} r={90} fill="url(#glowGrad)" />
-      {/* Subtle grid lines */}
+      <Rect width={CARD_WIDTH} height={CARD_HEIGHT} fill={`url(#${bgId})`} rx={24} />
+      <Circle cx={CARD_WIDTH * 0.82} cy={CARD_HEIGHT * 0.18} r={120} fill={`url(#${glowId})`} />
+      <Circle cx={CARD_WIDTH * 0.15} cy={CARD_HEIGHT * 0.82} r={90} fill={`url(#${glowId})`} />
       {Array.from({ length: 6 }).map((_, i) => (
         <Path
           key={i}
@@ -156,7 +281,7 @@ function CardBackground() {
   )
 }
 
-// ── Main component ───────────────────────────────────────────────────
+// ── Public types ─────────────────────────────────────────────────────
 export interface ShareCardData {
   displayName: string
   level: number
@@ -170,31 +295,39 @@ export interface ShareCardData {
 
 interface ShareCardProps {
   data: ShareCardData
+  theme?: ShareCardTheme
 }
 
-export function ShareCard({ data }: ShareCardProps) {
+// ── Main component ───────────────────────────────────────────────────
+export function ShareCard({ data, theme = SHARE_THEMES[0] }: ShareCardProps) {
   const completionPct = data.totalHabits > 0
     ? Math.round((data.completedToday / data.totalHabits) * 100)
     : 0
 
   return (
     <View style={styles.card}>
-      <CardBackground />
+      <CardBackground theme={theme} />
 
-      {/* ── Header ── */}
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.appBrand}>
           <Text style={styles.appIcon}>🎯</Text>
           <Text style={styles.appName}>Habit Tracker</Text>
         </View>
-        <View style={styles.levelBadge}>
-          <Text style={styles.levelText}>Nv. {data.level}</Text>
+        <View style={[styles.levelBadge, {
+          backgroundColor: theme.badgeBg,
+          borderColor: theme.badgeBorder,
+        }]}>
+          <Text style={[styles.levelText, { color: theme.badgeText }]}>Nv. {data.level}</Text>
         </View>
       </View>
 
-      {/* ── User section ── */}
+      {/* User section */}
       <View style={styles.userSection}>
-        <View style={styles.avatarCircle}>
+        <View style={[styles.avatarCircle, {
+          backgroundColor: theme.levelBg,
+          borderColor: theme.badgeBorder,
+        }]}>
           <Text style={styles.avatarInitial}>
             {data.displayName.charAt(0).toUpperCase()}
           </Text>
@@ -205,18 +338,16 @@ export function ShareCard({ data }: ShareCardProps) {
         </View>
       </View>
 
-      {/* ── Score ring + stats ── */}
+      {/* Score ring + stats */}
       <View style={styles.statsRow}>
-        <ScoreRingSvg score={data.score} />
+        <ScoreRingSvg score={data.score} theme={theme} />
         <View style={styles.statsRight}>
           <View style={styles.statItem}>
             <Text style={styles.statValue}>🔥 {data.streak}</Text>
             <Text style={styles.statLabel}>días de racha</Text>
           </View>
           <View style={[styles.statItem, styles.statItemBorder]}>
-            <Text style={styles.statValue}>
-              {data.completedToday}/{data.totalHabits}
-            </Text>
+            <Text style={styles.statValue}>{data.completedToday}/{data.totalHabits}</Text>
             <Text style={styles.statLabel}>hábitos hoy</Text>
           </View>
           <View style={styles.statItem}>
@@ -226,18 +357,18 @@ export function ShareCard({ data }: ShareCardProps) {
         </View>
       </View>
 
-      {/* ── Weekly heatmap ── */}
+      {/* Weekly heatmap */}
       <View style={styles.heatmapSection}>
         <Text style={styles.sectionLabel}>ÚLTIMOS 7 DÍAS</Text>
-        <HeatmapRow days={data.weekDays} />
+        <HeatmapRow days={data.weekDays} theme={theme} />
       </View>
 
-      {/* ── Legend ── */}
+      {/* Legend */}
       <View style={styles.legend}>
         {[
-          { color: 'rgba(255,255,255,0.12)', label: 'Sin completar' },
-          { color: '#DDD6FE', label: 'Parcial' },
-          { color: '#7C3AED', label: 'Completo' },
+          { color: theme.heatEmpty, label: 'Sin completar' },
+          { color: theme.heatMid, label: 'Parcial' },
+          { color: theme.heatFull, label: 'Completo' },
         ].map((l) => (
           <View key={l.label} style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: l.color }]} />
@@ -246,15 +377,12 @@ export function ShareCard({ data }: ShareCardProps) {
         ))}
       </View>
 
-      {/* ── Divider ── */}
       <View style={styles.divider} />
 
-      {/* ── Footer ── */}
+      {/* Footer */}
       <View style={styles.footer}>
-        <Text style={styles.footerText}>
-          Construyendo hábitos un día a la vez 💪
-        </Text>
-        <Text style={styles.footerTag}>#HabitTracker</Text>
+        <Text style={styles.footerText}>Construyendo hábitos un día a la vez 💪</Text>
+        <Text style={[styles.footerTag, { color: theme.tagColor }]}>#HabitTracker</Text>
       </View>
     </View>
   )
@@ -288,15 +416,12 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   levelBadge: {
-    backgroundColor: 'rgba(124,58,237,0.40)',
     borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.4)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
   },
   levelText: {
-    color: '#DDD6FE',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -309,9 +434,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(124,58,237,0.50)',
     borderWidth: 2,
-    borderColor: 'rgba(167,139,250,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -414,7 +537,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   footerTag: {
-    color: '#A78BFA',
     fontSize: 13,
     fontWeight: '700',
   },

@@ -13,6 +13,7 @@ import { StreakBadge } from './StreakBadge'
 import { useTheme } from '@/hooks/useTheme'
 import { typography, spacing, radius } from '@/constants/theme'
 import { todayString } from '@/utils/date'
+import { getFrequencyLabel } from '@/utils/frequency'
 
 interface HabitCardProps {
   habit: HabitWithCompletion
@@ -53,6 +54,12 @@ export function HabitCard({ habit, onToggle, onPress, onRequestValue, atRisk, di
   const valueProgress = isMeasurable && targetValue && currentValue !== null
     ? Math.min(currentValue / targetValue, 1)
     : null
+
+  // Frecuencia
+  const freqLabel = getFrequencyLabel(habit)
+  const isWeekly = habit.frequency_type === 'weekly'
+  const weeklyProgress = habit.weeklyProgress
+  const weeklyTarget = habit.weeklyTarget
 
   // Animar el fondo del card cuando cambia isCompleted
   useEffect(() => {
@@ -135,12 +142,27 @@ export function HabitCard({ habit, onToggle, onPress, onRequestValue, atRisk, di
               >
                 {habit.name}
               </Text>
-              <Text style={[styles.category, { color: colors.textSecondary }]}>
-                {CATEGORY_LABELS[habit.category]}
-                {isMeasurable && targetValue
-                  ? ` · ${currentValue !== null ? `${currentValue}/` : ''}${targetValue} ${habit.unit ?? (habit.type === 'timed' ? 'min' : '')}`
-                  : ''}
-              </Text>
+              <View style={styles.categoryRow}>
+                <Text style={[styles.category, { color: colors.textSecondary }]}>
+                  {CATEGORY_LABELS[habit.category]}
+                  {isMeasurable && targetValue
+                    ? ` · ${currentValue !== null ? `${currentValue}/` : ''}${targetValue} ${habit.unit ?? (habit.type === 'timed' ? 'min' : '')}`
+                    : ''}
+                </Text>
+                {freqLabel && (
+                  <View style={[styles.freqBadge, { backgroundColor: `${habit.color}18` }]}>
+                    <Text style={[styles.freqBadgeText, { color: habit.color }]}>{freqLabel}</Text>
+                  </View>
+                )}
+              </View>
+              {/* Progreso semanal para hábitos x/sem */}
+              {isWeekly && weeklyProgress !== undefined && weeklyTarget !== undefined && (
+                <Text style={[styles.weeklyProgress, {
+                  color: habit.isCompleted ? colors.success : colors.textSecondary,
+                }]}>
+                  {habit.isCompleted ? '✓' : `${weeklyProgress}/${weeklyTarget}`} esta sem.
+                </Text>
+              )}
               {/* Barra de progreso para hábitos medibles */}
               {isMeasurable && targetValue && valueProgress !== null && (
                 <View style={[styles.measurableTrack, { backgroundColor: colors.surface }]}>
@@ -280,5 +302,26 @@ const styles = StyleSheet.create({
   },
   riskBadgeText: {
     fontSize: 12,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flexWrap: 'wrap',
+  },
+  freqBadge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  freqBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  weeklyProgress: {
+    fontSize: typography.sizes.xs,
+    fontWeight: '500',
+    marginTop: 1,
   },
 })

@@ -7,6 +7,7 @@ import { useUserStore } from './user.store'
 import { enqueue } from '@/utils/offline-queue'
 import { calcAllHabitScores, calcGlobalScore } from '@/utils/scoring'
 import { supabase } from '@/services/supabase'
+import { getWeeklyCompletionCount } from '@/utils/frequency'
 
 interface CompletionsState {
   // Completions del día actual
@@ -45,22 +46,43 @@ export const useCompletionsStore = create<CompletionsState>((set, get) => ({
 
   habitsWithCompletions: () => {
     const habits = useHabitsStore.getState().habits
-    const { todayCompletions } = get()
+    const { todayCompletions, recentCompletions } = get()
     const completionMap = new Map(todayCompletions.map((c) => [c.habit_id, c]))
+    // Combine today + recent for weekly count (today completions may not be in recent yet)
+    const allCompletions = [...recentCompletions, ...todayCompletions]
 
-    return habits.map((habit) => ({
-      ...habit,
-      completion: completionMap.get(habit.id) ?? null,
-      isCompleted: completionMap.has(habit.id),
-    }))
+    return habits.map((habit): HabitWithCompletion => {
+      const todayCompletion = completionMap.get(habit.id) ?? null
+
+      if (habit.frequency_type === 'weekly') {
+        const target = habit.frequency_days ?? 1
+        const weekCount = getWeeklyCompletionCount(habit.id, allCompletions)
+        return {
+          ...habit,
+          completion: todayCompletion,
+          isCompleted: weekCount >= target,
+          weeklyProgress: weekCount,
+          weeklyTarget: target,
+        }
+      }
+
+      return {
+        ...habit,
+        completion: todayCompletion,
+        isCompleted: completionMap.has(habit.id),
+      }
+    })
   },
 
-  completedTodayCount: () => get().todayCompletions.length,
+  completedTodayCount: () => {
+    // Use habitsWithCompletions to respect weekly logic
+    return get().habitsWithCompletions().filter((h) => h.isCompleted).length
+  },
 
   todayCompletionRate: () => {
-    const total = useHabitsStore.getState().habits.length
-    if (total === 0) return 0
-    return get().todayCompletions.length / total
+    const habits = get().habitsWithCompletions()
+    if (habits.length === 0) return 0
+    return habits.filter((h) => h.isCompleted).length / habits.length
   },
 
   // ─────────────────────────────────────────

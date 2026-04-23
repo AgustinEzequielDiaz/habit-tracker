@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { Habit, CreateHabitForm, UpdateHabitForm } from '@/types'
 import { habitsService } from '@/services/habits.service'
 import { todayString } from '@/utils/date'
+import { isHabitDueToday } from '@/utils/frequency'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers de filtrado por fecha
@@ -16,7 +17,9 @@ function filterTodayHabits(habits: Habit[], today: string): Habit[] {
   return habits.filter((h) => {
     const startOk = !h.start_date || h.start_date <= today
     const endOk   = !h.end_date   || h.end_date   >= today
-    return startOk && endOk
+    if (!startOk || !endOk) return false
+    // Filtrar hábitos de días específicos que no corresponden a hoy
+    return isHabitDueToday(h)
   })
 }
 

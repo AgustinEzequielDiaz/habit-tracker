@@ -53,24 +53,27 @@ export const habitsService = {
       order_index:  nextIndex,
     }
 
-    // Intentar con los campos de scheduling (requiere migración V3)
+    // Intentar con scheduling + frequency (requiere migración V3 y V5)
     const { data, error } = await supabase
       .from('habits')
       .insert({
         ...basePayload,
-        start_date: form.start_date ?? today,
-        end_date:   form.end_date ?? null,
+        start_date:        form.start_date ?? today,
+        end_date:          form.end_date ?? null,
+        frequency_type:    form.frequency_type ?? 'daily',
+        frequency_days:    form.frequency_days ?? null,
+        frequency_weekdays: form.frequency_weekdays ?? null,
       })
       .select()
       .single()
 
-    // Si Supabase rechaza start_date/end_date (migración no ejecutada),
-    // reintentamos sin esos campos — el hábito se crea igual con defaults.
+    // Fallback: si faltan columnas (migración no ejecutada), reintentar sin campos opcionales
     if (error) {
       const isMissingColumn =
         error.message.includes('start_date') ||
         error.message.includes('end_date') ||
-        error.code === '42703' // PostgreSQL: column does not exist
+        error.message.includes('frequency') ||
+        error.code === '42703'
       if (isMissingColumn) {
         const { data: data2, error: error2 } = await supabase
           .from('habits')
