@@ -27,11 +27,11 @@ export async function enqueue(
 ): Promise<void> {
   const queue = await getQueue()
 
-  // Si ya existe la operación inversa para el mismo hábito/fecha, cancelarlas
   const invertOp: OfflineOperationType =
     operation === 'complete_habit' ? 'uncomplete_habit' : 'complete_habit'
 
-  const existingIndex = queue.findIndex(
+  // ── Caso 1: existe la operación INVERSA → se cancelan mutuamente ──
+  const inverseIndex = queue.findIndex(
     (op) =>
       op.operation === invertOp &&
       op.payload.habit_id === payload.habit_id &&
@@ -39,20 +39,42 @@ export async function enqueue(
       !op.synced
   )
 
-  if (existingIndex !== -1) {
-    // Cancelar la operación inversa (se anulan mutuamente)
-    queue.splice(existingIndex, 1)
-  } else {
-    const newOp: OfflineOperation = {
-      id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      operation,
-      payload,
-      created_at: new Date().toISOString(),
-      synced: false,
-    }
-    queue.push(newOp)
+  if (inverseIndex !== -1) {
+    queue.splice(inverseIndex, 1)
+    await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue))
+    return
   }
 
+  // ── Caso 2: ya existe la MISMA operación pendiente → idempotente, ignorar ──
+  // Esto evita duplicados cuando el usuario presiona el botón varias veces sin conexión.
+  // El upsert en Supabase garantiza idempotencia en el server, pero es mejor no
+  // saturar la cola con operaciones redundantes.
+  const duplicateIndex = queue.findIndex(
+    (op) =>
+      op.operation === operation &&
+      op.payload.habit_id === payload.habit_id &&
+      op.payload.completed_date === payload.completed_date &&
+      !op.synced
+  )
+
+  if (duplicateIndex !== -1) {
+    // Si el nuevo payload tiene un valor más reciente (hábito medible), actualizarlo
+    if (payload.value !== undefined && payload.value !== queue[duplicateIndex].payload.value) {
+      queue[duplicateIndex].payload.value = payload.value
+      await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue))
+    }
+    return
+  }
+
+  // ── Caso 3: operación nueva → agregar a la cola ──
+  const newOp: OfflineOperation = {
+    id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    operation,
+    payload,
+    created_at: new Date().toISOString(),
+    synced: false,
+  }
+  queue.push(newOp)
   await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue))
 }
 

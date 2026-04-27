@@ -50,35 +50,68 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    const today = new Date()
-    const yesterday = new Date(today)
-    yesterday.setUTCDate(today.getUTCDate() - 1)
-    const targetDate = yesterday.toISOString().split('T')[0]
+    // Permitir fecha específica via ?date=YYYY-MM-DD para re-runs manuales
+    const url = new URL(req.url)
+    const dateParam = url.searchParams.get('date')
 
-    const thirtyDaysAgo = new Date(yesterday)
-    thirtyDaysAgo.setUTCDate(yesterday.getUTCDate() - 29)
+    let targetDate: string
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      targetDate = dateParam
+      console.log(`Manual re-run for date: ${targetDate}`)
+    } else {
+      const yesterday = new Date()
+      yesterday.setUTCDate(yesterday.getUTCDate() - 1)
+      targetDate = yesterday.toISOString().split('T')[0]
+      console.log(`Cron run for date: ${targetDate}`)
+    }
+
+    const thirtyDaysAgo = new Date(targetDate)
+    thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 29)
     const fromDate = thirtyDaysAgo.toISOString().split('T')[0]
 
     // Obtener todos los usuarios con hábitos activos
-    const { data: activeUsers } = await supabase
+    const { data: activeUsers, error: usersError } = await supabase
       .from('habits')
       .select('user_id')
       .eq('is_active', true)
       .eq('is_archived', false)
 
+    if (usersError) throw usersError
+
     const uniqueUserIds = [...new Set(activeUsers?.map((h) => h.user_id) ?? [])]
     console.log(`Processing ${uniqueUserIds.length} users for date ${targetDate}`)
 
-    for (const userId of uniqueUserIds) {
-      await processUser(supabase, userId, targetDate, fromDate)
-    }
+    // ── Procesar cada usuario con aislamiento de errores ──
+    // Un fallo individual NO aborta el resto del batch.
+    const results = await Promise.allSettled(
+      uniqueUserIds.map((userId) =>
+        processUser(supabase, userId, targetDate, fromDate)
+      )
+    )
 
-    return new Response(JSON.stringify({ success: true, usersProcessed: uniqueUserIds.length }), {
-      headers: { 'Content-Type': 'application/json' },
-      status: 200,
+    const succeeded = results.filter((r) => r.status === 'fulfilled').length
+    const failed = results.filter((r) => r.status === 'rejected').length
+
+    // Loggear errores individuales sin tirar toda la respuesta
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        console.error(`Error processing user ${uniqueUserIds[i]}:`, r.reason)
+      }
     })
+
+    console.log(`Done: ${succeeded} ok, ${failed} failed`)
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        targetDate,
+        usersProcessed: succeeded,
+        usersFailed: failed,
+      }),
+      { headers: { 'Content-Type': 'application/json' }, status: 200 }
+    )
   } catch (error) {
-    console.error('calculate-daily-score error:', error)
+    console.error('calculate-daily-score fatal error:', error)
     return new Response(JSON.stringify({ error: String(error) }), {
       headers: { 'Content-Type': 'application/json' },
       status: 500,
@@ -93,22 +126,25 @@ async function processUser(
   fromDate: string
 ) {
   // 1. Obtener hábitos activos del usuario
-  const { data: habits } = await supabase
+  const { data: habits, error: habitsError } = await supabase
     .from('habits')
     .select('id, difficulty')
     .eq('user_id', userId)
     .eq('is_active', true)
     .eq('is_archived', false)
 
+  if (habitsError) throw habitsError
   if (!habits || habits.length === 0) return
 
   // 2. Obtener completions de los últimos 30 días
-  const { data: completions } = await supabase
+  const { data: completions, error: completionsError } = await supabase
     .from('habit_completions')
     .select('habit_id, completed_date')
     .eq('user_id', userId)
     .gte('completed_date', fromDate)
     .lte('completed_date', targetDate)
+
+  if (completionsError) throw completionsError
 
   const completionsByHabit = new Map<string, Set<string>>()
   for (const c of completions ?? []) {
@@ -126,7 +162,6 @@ async function processUser(
     const doneSet = completionsByHabit.get(habit.id) ?? new Set<string>()
     const done = doneSet.size
 
-    // Calcular gap máximo consecutivo
     let maxGap = 0
     let currentGap = 0
     const cur = new Date(fromDate)
@@ -160,31 +195,41 @@ async function processUser(
   const xpEarned = XP_BY_RATE(completionRate)
 
   // 6. Upsert daily_summary
-  await supabase.from('daily_summaries').upsert({
-    user_id: userId,
-    summary_date: targetDate,
-    habits_total: habits.length,
-    habits_completed: dayDone,
-    completion_rate: Math.round(completionRate * 100 * 100) / 100,
-    global_score: Math.round(globalScore * 100) / 100,
-    xp_earned: xpEarned,
-  })
+  const { error: summaryError } = await supabase.from('daily_summaries').upsert(
+    {
+      user_id:          userId,
+      summary_date:     targetDate,
+      habits_total:     habits.length,
+      habits_completed: dayDone,
+      completion_rate:  Math.round(completionRate * 100 * 100) / 100,
+      global_score:     Math.round(globalScore * 100) / 100,
+      xp_earned:        xpEarned,
+    },
+    { onConflict: 'user_id,summary_date' }
+  )
+  if (summaryError) throw summaryError
 
   // 7. Actualizar usuario
-  const { data: user } = await supabase
+  const { data: user, error: userError } = await supabase
     .from('users')
     .select('total_xp, streak_best')
     .eq('id', userId)
     .single()
 
+  if (userError) throw userError
+
   if (user) {
     const newTotalXp = (user.total_xp ?? 0) + xpEarned
     const newLevel = calcLevel(newTotalXp)
-
-    await supabase
+    const { error: updateError } = await supabase
       .from('users')
-      .update({ global_score: Math.round(globalScore * 100) / 100, total_xp: newTotalXp, level: newLevel })
+      .update({
+        global_score: Math.round(globalScore * 100) / 100,
+        total_xp:     newTotalXp,
+        level:        newLevel,
+      })
       .eq('id', userId)
+    if (updateError) throw updateError
   }
 
   // 8. Actualizar streaks
@@ -210,32 +255,28 @@ async function updateStreaks(
       .select('*')
       .eq('habit_id', habit.id)
       .is('end_date', null)
-      .single()
+      .maybeSingle()  // evita error si no hay racha activa
 
     if (didCompleteToday) {
       if (activeStreak) {
-        // Extender racha existente
         await supabase
           .from('habit_streaks')
           .update({ length_days: activeStreak.length_days + 1 })
           .eq('id', activeStreak.id)
       } else {
-        // Iniciar nueva racha
         await supabase.from('habit_streaks').insert({
-          habit_id: habit.id,
-          user_id: userId,
+          habit_id:   habit.id,
+          user_id:    userId,
           start_date: targetDate,
           length_days: 1,
         })
       }
     } else if (activeStreak) {
-      // Cerrar racha por fallo
       await supabase
         .from('habit_streaks')
         .update({ end_date: targetDate, length_days: activeStreak.length_days })
         .eq('id', activeStreak.id)
 
-      // Actualizar best streak del usuario
       const { data: user } = await supabase
         .from('users')
         .select('streak_best')
@@ -269,6 +310,9 @@ async function checkAchievements(
   for (const key of toUnlock) {
     await supabase
       .from('user_achievements')
-      .upsert({ user_id: userId, achievement_key: key }, { onConflict: 'user_id,achievement_key', ignoreDuplicates: true })
+      .upsert(
+        { user_id: userId, achievement_key: key },
+        { onConflict: 'user_id,achievement_key', ignoreDuplicates: true }
+      )
   }
 }

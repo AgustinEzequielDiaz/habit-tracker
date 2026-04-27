@@ -8,6 +8,7 @@ import { enqueue } from '@/utils/offline-queue'
 import { calcAllHabitScores, calcGlobalScore } from '@/utils/scoring'
 import { supabase } from '@/services/supabase'
 import { getWeeklyCompletionCount } from '@/utils/frequency'
+import { captureError } from '@/services/sentry'
 
 interface CompletionsState {
   // Completions del día actual
@@ -162,6 +163,7 @@ export const useCompletionsStore = create<CompletionsState>((set, get) => ({
         set({ todayCompletions })
         get().recalculateScore()
         set({ error: 'Error al sincronizar. Reintentando...' })
+        captureError(error, { context: 'toggleCompletion', habitId })
       }
     } else {
       // Sin internet: guardar en cola offline
@@ -227,6 +229,7 @@ export const useCompletionsStore = create<CompletionsState>((set, get) => ({
     } catch (err) {
       // El score fallando no debe bloquear el flujo principal de la app
       console.warn('recalculateScore error:', err)
+      captureError(err, { context: 'recalculateScore' })
     }
   },
 

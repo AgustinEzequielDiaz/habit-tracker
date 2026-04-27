@@ -10,6 +10,7 @@ import { getTheme } from '@/constants/theme'
 import { FloatingActionButton } from '@/components/ui/FloatingActionButton'
 import { QuickCompleteSheet } from '@/components/habits/QuickCompleteSheet'
 import { JournalSheet } from '@/components/ui/JournalSheet'
+import { useHabitsWithCompletions } from '@/hooks/useHabitsWithCompletions'
 
 export default function MainLayout() {
   const { user } = useUserStore()
@@ -18,7 +19,8 @@ export default function MainLayout() {
   const { fabAction } = useSettingsStore()
   const { isOnline } = useSyncStore()
   const { habits } = useHabitsStore()
-  const { habitsWithCompletions, toggleCompletion } = useCompletionsStore()
+  const { toggleCompletion } = useCompletionsStore()
+  const habitsData = useHabitsWithCompletions()
 
   const [quickSheetOpen, setQuickSheetOpen] = useState(false)
   const [journalSheetOpen, setJournalSheetOpen] = useState(false)
@@ -32,19 +34,17 @@ export default function MainLayout() {
         setQuickSheetOpen(true)
         break
       case 'new_habit':
-        router.navigate('/(main)/habits/index')
+        router.navigate('/(main)/habits')
         break
       case 'log_mood':
         // Navigate to today tab — MoodPicker is already there
-        router.navigate('/(main)/today/index')
+        router.navigate('/(main)/today')
         break
       case 'write_note':
         setJournalSheetOpen(true)
         break
     }
   }
-
-  const habitsData = habitsWithCompletions()
 
   return (
     <View style={{ flex: 1 }}>

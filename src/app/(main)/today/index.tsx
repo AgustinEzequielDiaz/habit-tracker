@@ -20,7 +20,9 @@ import { MotivationCard } from '@/components/ui/MotivationCard'
 import { MoodPicker } from '@/components/ui/MoodPicker'
 import { JournalCard } from '@/components/ui/JournalCard'
 import { JournalSheet } from '@/components/ui/JournalSheet'
+import { AIInsightsCard } from '@/components/stats/AIInsightsCard'
 import { useTheme } from '@/hooks/useTheme'
+import { useHabitsWithCompletions, useCompletedTodayCount, useTodayCompletionRate } from '@/hooks/useHabitsWithCompletions'
 import { spacing, typography, radius } from '@/constants/theme'
 import { formatDisplayDate, todayString } from '@/utils/date'
 import { HabitWithCompletion } from '@/types'
@@ -62,10 +64,12 @@ export default function TodayScreen() {
   const { habits, loadHabits, isLoading: habitsLoading } = useHabitsStore()
   const {
     loadTodayCompletions, loadRecentCompletions,
-    toggleCompletion, habitsWithCompletions,
-    completedTodayCount, todayCompletionRate,
+    toggleCompletion,
     recentCompletions, todayCompletions,
   } = useCompletionsStore()
+  const habitsData    = useHabitsWithCompletions()
+  const completedCount = useCompletedTodayCount()
+  const completionRate = useTodayCompletionRate()
   const { isOnline } = useSyncStore()
 
   const [refreshing, setRefreshing] = useState(false)
@@ -107,9 +111,6 @@ export default function TodayScreen() {
     setValueInputHabit(null)
   }
 
-  const habitsData = habitsWithCompletions()
-  const completedCount = completedTodayCount()
-  const completionRate = todayCompletionRate()
   const allDone = habits.length > 0 && completedCount === habits.length
 
   // Detectar hábitos en riesgo de abandono (0 completions en los últimos 7 días)
@@ -213,6 +214,9 @@ export default function TodayScreen() {
 
       {/* Mood del día */}
       <MoodPicker />
+
+      {/* IA: sugerencia del día (compacta) */}
+      <AIInsightsCard compact />
 
       {/* Journal diario */}
       <JournalCard onPress={() => setJournalOpen(true)} />

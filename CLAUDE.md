@@ -4,9 +4,127 @@
 
 ---
 
-## ESTADO ACTUAL: V5.0 — Frecuencias no-diarias + ShareCard Carousel
+## ESTADO ACTUAL: V6 — Mood Analytics + IA Personalizada
 
 Leer `CONTEXT_V1.md` para el contexto completo de arquitectura, decisiones y flujos.
+
+### V6 — Mood Analytics + IA Personalizada (2026-04-26)
+
+#### Objetivo: diferencial fuerte en retención — insight y análisis personalizado
+
+#### 1. MoodChart — gráfico mood vs. completions
+- **`src/components/stats/MoodChart.tsx`** — Nuevo componente SVG (react-native-svg):
+  - Línea sólida: completion rate (0-100%) en color primary
+  - Línea punteada: mood (1-5 normalizado a 0-100%) en rose-500
+  - Últimos 30 días con gaps cuando no hay dato
+  - Stats header: promedio mood (con emoji) + promedio completions
+  - Grid lines en 0/25/50/75/100, etiquetas X cada 7 días
+  - Insight de correlación automático al pie (si ≥5 días con ambos datos)
+- **`src/app/(main)/stats/index.tsx`** — Sección "Mood & Hábitos" con MoodChart, entre los Insights de IA y el heatmap
+
+#### 2. AI Insights — sugerencias personalizadas via OpenAI
+- **`supabase/migrations/v7_ai_insights.sql`** — Nueva tabla `ai_insights`:
+  - Campos: user_id, generated_date (DATE), insights (JSONB), model, tokens_used
+  - UNIQUE (user_id, generated_date) para caché diario
+  - RLS completo (SELECT/INSERT/UPDATE/DELETE propios)
+- **`supabase/functions/ai-insights/index.ts`** — Edge Function:
+  - Auth: requiere JWT del usuario
+  - Contexto enviado a GPT-4o-mini: hábitos activos con % 14d y streaks, mood últimos 7d, score global, XP, racha
+  - Prompt de sistema: español rioplatense, 3 insights máx, tipos: tip/warning/achievement/challenge
+  - `response_format: { type: 'json_object' }` — respuesta JSON garantizada
+  - Caché 24h en `ai_insights` (upsert con onConflict). Si hay caché devuelve sin llamar a OpenAI
+  - Parámetro `forceRefresh: boolean` para forzar regeneración
+  - **Setup**: `supabase secrets set OPENAI_API_KEY=sk-...`
+- **`src/services/ai-insights.service.ts`** — Servicio thin wrapper sobre fetch a la Edge Function
+- **`src/components/stats/AIInsightsCard.tsx`** — Componente con 4 estados:
+  - CTA: botón para cargar por primera vez (lazy loading — no carga al montar)
+  - Loading: skeletons + spinner "Analizando tus hábitos..."
+  - Error: mensaje + botón "Reintentar"
+  - Con insights: cards con borde color por tipo, emoji, badge, título y cuerpo
+  - Footer (solo modo completo): fecha generación, badge caché vs. fresco, botón "🔄 Actualizar"
+  - `compact?: boolean` — muestra solo 1 insight (para pantalla Hoy)
+- **`src/app/(main)/stats/index.tsx`** — Sección "Sugerencias IA" con `<AIInsightsCard />`
+- **`src/app/(main)/today/index.tsx`** — `<AIInsightsCard compact />` entre MoodPicker y JournalCard
+
+#### 3. TypeScript — 0 errores en V6 completo
+- `npm run type-check` pasa con **0 errores** en todo el codebase V6
+
+### Sprint de Calidad — V5.2 (2026-04-26)
+
+#### Objetivo: observabilidad, performance y robustez en producción
+
+#### 1. Sentry — Error Tracking
+- **`src/services/sentry.ts`** — Nuevo módulo con carga dinámica via `require()` (evita error de build si `npm install` no fue ejecutado):
+  - `initSentry()`: inicializa con DSN de env, `enabled: !__DEV__`, `tracesSampleRate: 0.2`
+  - `identifySentryUser(userId, email?)`: vincula errores al usuario autenticado
+  - `clearSentryUser()`: limpia identidad en logout
+  - `captureError(error, context?)`: en dev → `console.error`, en prod → Sentry con contexto
+  - `captureMessage(message, level?)`: mensajes informativos
+  - `startTransaction(name, op)`: wraps `startInactiveSpan` para medir performance
+  - Ignora automáticamente: `'Network request failed'`, `'AbortError'`, `'User cancelled'`
+- **`src/app/_layout.tsx`** — `initSentry()` al module level (antes del primer render). `identifySentryUser` en login, `clearSentryUser` en logout.
+- **`src/stores/completions.store.ts`** — `captureError()` en `toggleCompletion` y `recalculateScore`.
+- **`package.json`** — `"@sentry/react-native": "^6.0.0"` agregado. Requiere `npm install`.
+- **Setup**: crear proyecto en sentry.io → agregar `EXPO_PUBLIC_SENTRY_DSN` al `.env`.
+
+#### 2. Edge Function hardening — calculate-daily-score
+- **`supabase/functions/calculate-daily-score/index.ts`** — Reescrito con:
+  - Parámetro `?date=YYYY-MM-DD` para re-runs manuales (validado con regex `/^\d{4}-\d{2}-\d{2}$/`)
+  - `Promise.allSettled()` en lugar de for-loop: aísla fallas por usuario, los demás siguen procesando
+  - `.maybeSingle()` en lugar de `.single()` para streak queries (no error si sin streak)
+  - Response: `{ success, targetDate, usersProcessed, usersFailed }`
+
+#### 3. Timezone fix — send-reminders
+- **`supabase/functions/send-reminders/index.ts`** — Fix para usuarios fuera de UTC:
+  - Calcula `yesterdayUTCStr` además de `todayUTC`
+  - Query de completions usa `.in('completed_date', [todayUTC, yesterdayUTCStr])` en lugar de `eq`
+  - Per-user try/catch en el loop de notificaciones
+
+#### 4. Memoización de habitsWithCompletions
+- **`src/hooks/useHabitsWithCompletions.ts`** — Nuevo hook con `useMemo` y selectores Zustand precisos:
+  - `useHabitsWithCompletions()`: deps `[habits, todayCompletions, recentCompletions]`. Maneja weekly habits igual que el store.
+  - `useCompletedTodayCount()`: memoizado sobre el hook anterior
+  - `useTodayCompletionRate()`: memoizado sobre el hook anterior
+- **`src/app/(main)/today/index.tsx`** — Migrado de `habitsWithCompletions()` del store a los hooks
+- El store mantiene las funciones por compatibilidad (HabitDetailSheet, etc.) pero Today no las llama
+
+#### 5. TypeScript — 0 errores en V5.2 completo
+- `npm run type-check` pasa con **0 errores** en todo el codebase V5.2
+
+### Sprint de Solidez — V5.1 (2026-04-26)
+
+#### Objetivo: production readiness antes del lanzamiento a App Store
+
+#### 1. Mood persistido en Supabase
+- **`src/services/mood.service.ts`** — Nuevo servicio: `upsertToday(mood, date)` + `getHistory(days)`. Usa `upsert` con `onConflict: 'user_id,entry_date'` (constraint único ya en DB).
+- **`src/stores/mood.store.ts`** — Reescrito con estrategia dual:
+  - `setTodayMood`: actualiza local → AsyncStorage → Supabase fire-and-forget
+  - `loadHistory`: AsyncStorage inmediato → Supabase en background (autoritativo)
+  - **Migración one-time**: si Supabase está vacío pero AsyncStorage tiene datos, los sube automáticamente. Solo corre una vez.
+
+#### 2. Journal persistido en Supabase
+- **`supabase/migrations/v6_journal_entries.sql`** — Nueva tabla `journal_entries` (user_id, entry_date, text, timestamps). UNIQUE (user_id, entry_date). RLS completo (SELECT/INSERT/UPDATE/DELETE propios). Trigger updated_at.
+- **`src/services/journal.service.ts`** — Nuevo servicio: `upsertEntry(date, text)` + `getHistory(days)` + `deleteEntry(date)`.
+- **`src/stores/journal.store.ts`** — Reescrito con misma estrategia dual que mood. Si el texto se guarda vacío, `deleteEntry()` en Supabase.
+
+#### 3. Auditoría y completado de RLS
+- **`supabase/migrations/v6_rls_gaps.sql`** — Gaps encontrados y cerrados:
+  - `streak_freezes`: tenía SELECT + INSERT, faltaba **DELETE** → agregado
+  - `users`: faltaba policy de INSERT (para el trigger handle_new_user + service_role) → agregado
+  - `daily_summaries`: faltaba policy de DELETE para service_role → agregado
+  - `user_achievements`: faltaba policy de DELETE para service_role → agregado
+- `mood_entries` y `journal_entries` tienen RLS completo en sus propias migraciones ✅
+
+#### 4. Deduplicación de cola offline
+- **`src/utils/offline-queue.ts`** — `enqueue()` mejorado con 3 casos:
+  - Operación **inversa** pendiente → se cancelan mutuamente (ya existía)
+  - **Misma operación** ya en cola → idempotente, se ignora (nuevo). Evita duplicados por doble-tap offline.
+  - Si es medible y el nuevo payload tiene valor distinto → actualiza el valor en la operación existente
+  - Operación **nueva** → se encola normalmente
+
+#### 5. TypeScript — 0 errores en V5 completo
+- Corrección en `_layout.tsx`: `router.navigate('/(main)/habits/index')` y `router.navigate('/(main)/today/index')` → rutas correctas sin `/index`
+- `npm run type-check` pasa con **0 errores** en todo el codebase V5.1
 
 ### Features implementados en V5.0 (2026-04-23)
 
@@ -208,8 +326,8 @@ src/
 │   ├── gamification/ # XPProgressBar, AchievementCard, StreakFreezeWidget ← NUEVO V2
 │   └── ui/       # Button, Card, MotivationCard, MoodPicker, DailyJournalWidget ← NUEVO V4
 ├── stores/       # user, habits, completions, sync, mood, journal ← NUEVO V4 (Zustand)
-├── services/     # supabase, habits, completions, notifications
-├── hooks/        # useTheme, useSync
+├── services/     # supabase, habits, completions, notifications, sentry ← NUEVO V5.2
+├── hooks/        # useTheme, useSync, useHabitsWithCompletions ← NUEVO V5.2
 ├── utils/        # date, scoring, offline-queue
 ├── constants/    # theme (dark/light), achievements, habit-templates ← NUEVO V2
 └── types/        # index.ts (User, Habit, StreakFreeze ← NUEVO V2)
@@ -283,6 +401,59 @@ eas build --profile production --platform all
 ```
 
 ---
+
+## CHECKLIST PARA PRIMERA PRUEBA (V6 — Mood Analytics + IA)
+
+- [ ] **Migración v7** → ejecutar `supabase/migrations/v7_ai_insights.sql` en Supabase SQL Editor
+- [ ] **Configurar OpenAI API Key**:
+  ```bash
+  supabase secrets set OPENAI_API_KEY=sk-...
+  ```
+- [ ] **Deploy Edge Function**:
+  ```bash
+  supabase functions deploy ai-insights
+  ```
+- [ ] **Flujos a testear:**
+  1. Pantalla Hoy → card "Ver mi sugerencia de hoy" → tap → loading → insight compacto aparece
+  2. Pantalla Stats → sección "Sugerencias IA" → 3 insights con badges de color (tip/warning/achievement/challenge)
+  3. Stats → footer de AIInsightsCard → "🔄 Actualizar" → fuerza regeneración (nuevo llamado a OpenAI, ignora caché)
+  4. Reabrir la app → los insights cargan instantáneamente (caché de Supabase, sin costo OpenAI)
+  5. Pantalla Stats → sección "Mood & Hábitos" → gráfico de dos líneas visible (requiere ≥2 días de mood registrado)
+  6. Registrar moods por varios días → verificar correlación al pie del gráfico
+
+## CHECKLIST PARA PRIMERA PRUEBA (V5.2 — Sprint de Calidad)
+
+- [ ] **npm install** — instalar `@sentry/react-native`
+- [ ] **Crear proyecto en Sentry** → https://sentry.io → New Project → React Native
+- [ ] **Agregar al `.env`**: `EXPO_PUBLIC_SENTRY_DSN=https://xxx@oxx.ingest.sentry.io/xxx`
+- [ ] **Deploy Edge Functions** (si hubo cambios):
+  ```bash
+  supabase functions deploy calculate-daily-score
+  supabase functions deploy send-reminders
+  ```
+- [ ] **Flujos a testear:**
+  1. Completar un hábito → deshacer → re-completar → verificar que el score reacciona sin delay en cada toggle
+  2. Simular error (cortar red a mitad de toggle) → verificar que aparece banner de error y se revierte el optimistic
+  3. Re-run manual del cron: `POST /calculate-daily-score?date=2026-04-25` → verificar response con `usersProcessed` + `usersFailed`
+  4. Usuario en UTC-5: completar hábito a las 23:30 UTC → verificar que send-reminders no le manda recordatorio al día siguiente
+  5. En Sentry Dashboard (prod): triggear un error intencionalmente → verificar que llega con contexto de usuario
+
+## CHECKLIST PARA PRIMERA PRUEBA (V5.1 — Sprint de Solidez)
+
+- [ ] **Migración v6** → ejecutar en Supabase SQL Editor en este orden:
+  1. `supabase/migrations/v6_journal_entries.sql` — crea tabla journal_entries
+  2. `supabase/migrations/v6_rls_gaps.sql` — cierra gaps de RLS
+- [ ] **Validar RLS** → ejecutar en Supabase SQL Editor:
+  ```sql
+  SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;
+  ```
+  → todas las tablas deben tener `rowsecurity = true`
+- [ ] **Flujos a testear:**
+  1. Registrar mood → cerrar app → reinstalar (o limpiar datos) → verificar que el historial persiste (viene de Supabase)
+  2. Escribir en journal → cerrar app → reinstalar → verificar que la nota persiste
+  3. **Migración one-time**: usuario con datos en AsyncStorage (pre-V5.1) → abrir app con conexión → verificar en Supabase Dashboard que los datos locales se subieron
+  4. Modo offline: completar hábito 3 veces rápido sin conexión → verificar que la cola tiene solo 1 operación pendiente (deduplicación)
+  5. Modo offline: completar y descompletar el mismo hábito sin conexión → verificar que la cola queda vacía (cancelación inversa)
 
 ## CHECKLIST PARA PRIMERA PRUEBA (V5.0)
 
@@ -370,3 +541,6 @@ eas build --profile production --platform all
 | V4 | ✅ Completo | Agenda semanal, journal diario, smart notifications, compartir progreso |
 | V4.1 | ✅ Completo | Journal redesign (JournalCard+Sheet), FAB configurable, tarjeta visual redes sociales |
 | V5 | ✅ Completo | Frecuencias no-diarias (weekly + custom), carrusel de 5 temas ShareCard |
+| V5.1 | ✅ Completo | Sprint solidez: mood+journal en Supabase, RLS completo, dedup offline, 0 TS errors |
+| V5.2 | ✅ Completo | Sprint calidad: Sentry error tracking, Edge Function hardening, timezone fix, memoización |
+| V6   | ✅ Completo | MoodChart SVG (mood vs. completions), AI Insights via OpenAI GPT-4o-mini con caché 24h |

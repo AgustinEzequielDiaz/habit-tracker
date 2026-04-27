@@ -7,6 +7,8 @@ import { HeatmapGrid } from '@/components/stats/HeatmapGrid'
 import { ScoreRing } from '@/components/stats/ScoreRing'
 import { WeeklyChart } from '@/components/stats/WeeklyChart'
 import { InsightsCard } from '@/components/stats/InsightsCard'
+import { MoodChart } from '@/components/stats/MoodChart'
+import { AIInsightsCard } from '@/components/stats/AIInsightsCard'
 import { Card } from '@/components/ui/Card'
 import { useUserStore } from '@/stores/user.store'
 import { useHabitsStore } from '@/stores/habits.store'
@@ -108,7 +110,7 @@ export default function StatsScreen() {
           </View>
         </Card>
 
-        {/* ── NUEVO: Gráfico semanal ── */}
+        {/* ── Gráfico semanal ── */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Últimos 7 días</Text>
           <Card>
@@ -116,7 +118,21 @@ export default function StatsScreen() {
           </Card>
         </View>
 
-        {/* ── NUEVO: Insights ── */}
+        {/* ── IA: Sugerencias personalizadas ── */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Sugerencias IA</Text>
+          <AIInsightsCard />
+        </View>
+
+        {/* ── Mood vs Completions ── */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Mood & Hábitos</Text>
+          <Card>
+            <MoodChart summaries={summaries} />
+          </Card>
+        </View>
+
+        {/* ── Insights automáticos ── */}
         {(summaries.length > 3 || completions.length > 0) && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Insights</Text>

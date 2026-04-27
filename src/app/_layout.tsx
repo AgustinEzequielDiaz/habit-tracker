@@ -9,6 +9,10 @@ import { supabase } from '@/services/supabase'
 import { useUserStore } from '@/stores/user.store'
 import { useSettingsStore } from '@/stores/settings.store'
 import { useSync } from '@/hooks/useSync'
+import { initSentry, identifySentryUser, clearSentryUser } from '@/services/sentry'
+
+// Inicializar Sentry lo antes posible (antes del primer render)
+initSentry()
 
 SplashScreen.preventAutoHideAsync()
 
@@ -36,9 +40,14 @@ export default function RootLayout() {
             .select('*')
             .eq('id', session.user.id)
             .single()
-          if (data) setUser(data as any)
+          if (data) {
+            setUser(data as any)
+            // Identificar al usuario en Sentry para poder filtrar errores por usuario
+            identifySentryUser(session.user.id, session.user.email)
+          }
         } else {
           setUser(null)
+          clearSentryUser()
         }
       } catch (e) {
         console.warn('Auth state change error:', e)
